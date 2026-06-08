@@ -10,6 +10,7 @@ import { NotificationBanner } from "@/components/NotificationBanner";
 import { StatCard } from "@/components/StatCard";
 import { XPBar } from "@/components/XPBar";
 import { getDailyCompletionPercentage, getLevelTier, getLevelTierLabel, getTitleForLevel } from "@/lib/progression";
+import { DEV_MODE } from "@/lib/dev-mode";
 import { hasSupabaseConfig } from "@/lib/supabase";
 import { useDecideLife } from "@/lib/local-store";
 import type { LevelProgress } from "@/types";
@@ -55,6 +56,7 @@ export default function DashboardPage() {
   const [devStatOverride, setDevStatOverride] = useState<DevStatOverride | null>(null);
 
   useEffect(() => {
+    if (!DEV_MODE) return;
     try {
       const saved = window.localStorage.getItem(DEV_STAT_OVERRIDE_KEY);
       if (saved) {
@@ -72,7 +74,7 @@ export default function DashboardPage() {
   const lockedHabits = visibleHabits.filter((habit) => !habit.unlocked);
   const activeMissions = visibleMissions.filter((mission) => !mission.completed).slice(0, 3);
   const completion = getDailyCompletionPercentage(habits, todayCompletedHabitIds);
-  const previewEnabled = devStatOverride?.enabled ?? false;
+  const previewEnabled = DEV_MODE && (devStatOverride?.enabled ?? false);
   const displayLevelProgress = useMemo(
     () => previewEnabled && devStatOverride
       ? calculateDevLevelProgress(devStatOverride.level, devStatOverride.totalXp)
@@ -88,12 +90,12 @@ export default function DashboardPage() {
   const LevelIcon = levelTier >= 7 ? Gem : levelTier >= 5 ? Crown : levelTier >= 3 ? Trophy : Shield;
   const levelFrameTier = levelTier >= 7 ? 7 : levelTier;
   const handleDevStatChange = (override: DevStatOverride) => {
-    // TEMP TESTING FEATURE - remove before final release.
+    if (!DEV_MODE) return;
     setDevStatOverride(override);
     window.localStorage.setItem(DEV_STAT_OVERRIDE_KEY, JSON.stringify(override));
   };
   const handleDevStatReset = () => {
-    // TEMP TESTING FEATURE - remove before final release.
+    if (!DEV_MODE) return;
     setDevStatOverride(null);
     window.localStorage.removeItem(DEV_STAT_OVERRIDE_KEY);
   };
@@ -112,15 +114,17 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        <DevStatTester
-          override={devStatOverride}
-          realLevel={levelProgress.level}
-          realTotalXp={profile.totalXp}
-          realCompletion={completion}
-          realProtectors={protectorsRemaining}
-          onChange={handleDevStatChange}
-          onReset={handleDevStatReset}
-        />
+        {DEV_MODE ? (
+          <DevStatTester
+            override={devStatOverride}
+            realLevel={levelProgress.level}
+            realTotalXp={profile.totalXp}
+            realCompletion={completion}
+            realProtectors={protectorsRemaining}
+            onChange={handleDevStatChange}
+            onReset={handleDevStatReset}
+          />
+        ) : null}
 
         <NotificationBanner message={notification} onDismiss={dismissNotification} />
 

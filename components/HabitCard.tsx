@@ -2,6 +2,7 @@
 
 import { Check, Crown, Dumbbell, Flame, Gem, Pencil, Sparkles, Star, Trash2, Trophy, X } from "lucide-react";
 import { clsx } from "clsx";
+import { DEV_MODE } from "@/lib/dev-mode";
 import { getHabitCompletionXp, getStreakTier, getStreakTierLabel } from "@/lib/progression";
 import type { Habit, HabitLog } from "@/types";
 
@@ -113,8 +114,7 @@ function FramePieces({ tier }: { tier: number }) {
 }
 
 export function HabitCard({ habit, log, onComplete, onMiss, onEdit, onArchive, compact = false }: HabitCardProps) {
-  // TEMP TESTING FEATURE - remove before final release.
-  const visualStreak = habit.testingStreakOverride ?? habit.currentStreak;
+  const visualStreak = DEV_MODE ? habit.testingStreakOverride ?? habit.currentStreak : habit.currentStreak;
   const tier = getStreakTier(visualStreak);
   const tierLabel = getStreakTierLabel(visualStreak);
   const TierIcon = tierMeta[tier].Icon;
@@ -179,7 +179,7 @@ export function HabitCard({ habit, log, onComplete, onMiss, onEdit, onArchive, c
               <p className="text-xs text-slate-400">
                 Best {habit.bestStreak} days · Streak {visualStreak}d · Next +
                 {getHabitCompletionXp(habit.currentStreak + 1, habit.baseXp, habit.streakMultiplierEnabled)} XP
-                {habit.testingStreakOverride !== undefined ? " · Testing override" : ""}
+                {DEV_MODE && habit.testingStreakOverride !== undefined ? " - Testing override" : ""}
               </p>
               {!compact ? (
                 <div className="flex flex-wrap gap-2">

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AlertTriangle, Database, Shield, X } from "lucide-react";
 import { AuthPanel } from "@/components/AuthPanel";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DEV_MODE } from "@/lib/dev-mode";
 import { hasSupabaseConfig } from "@/lib/supabase";
 import { useDecideLife } from "@/lib/local-store";
 
@@ -62,95 +63,99 @@ export default function SettingsPage() {
             </p>
           </article>
 
-          <article className="dl-card p-5">
-            <div className="mb-3 flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-cyan" />
-              <div>
-                <h2 className="font-semibold text-white">Developer Testing</h2>
-                <p className="text-xs text-slate-500">Testing Only: preview habit streak visuals.</p>
+          {DEV_MODE ? (
+            <article className="dl-card p-5">
+              <div className="mb-3 flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-cyan" />
+                <div>
+                  <h2 className="font-semibold text-white">Developer Testing</h2>
+                  <p className="text-xs text-slate-500">Testing Only: preview habit streak visuals.</p>
+                </div>
               </div>
-            </div>
-            <p className="text-sm text-slate-400">
-              TEMP TESTING FEATURE - remove before final release. This changes only the visual streak display and card tier.
-            </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_10rem_auto_auto]">
-              <label className="grid gap-2 text-sm text-slate-300">
-                Habit
-                <select
-                  className="rounded-lg border border-line bg-ink/70 px-3 py-2 text-white outline-none transition focus:border-cyan/60"
-                  value={testingHabitId}
-                  onChange={(event) => updateTestingHabit(event.currentTarget.value)}
-                >
-                  {visibleHabits.map((habit) => (
-                    <option key={habit.id} value={habit.id}>
-                      {habit.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-2 text-sm text-slate-300">
-                Streak
-                <input
-                  type="number"
-                  min={0}
-                  className="rounded-lg border border-line bg-ink/70 px-3 py-2 text-white outline-none transition focus:border-cyan/60"
-                  value={testingStreak}
-                  onChange={(event) => setTestingStreak(Number(event.currentTarget.value))}
-                />
-              </label>
-              <button
-                type="button"
-                className="dl-button self-end rounded-lg bg-gradient-to-r from-cyan to-mint px-4 py-2 text-sm font-semibold text-slate-950 shadow-glow hover:brightness-110"
-                disabled={!testingHabitId}
-                onClick={() => setHabitTestingStreakOverride(testingHabitId, testingStreak)}
-              >
-                Save Override
-              </button>
-              <button
-                type="button"
-                className="dl-button self-end rounded-lg border border-line bg-white/[0.03] px-4 py-2 text-sm text-slate-300 hover:border-cyan/60"
-                disabled={!testingHabitId}
-                onClick={() => {
-                  clearHabitTestingStreakOverride(testingHabitId);
-                  setTestingStreak(selectedTestingHabit?.currentStreak ?? 0);
-                }}
-              >
-                Reset
-              </button>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {[0, 7, 30, 60, 100, 180, 365].map((value) => (
+              <p className="text-sm text-slate-400">
+                TEMP TESTING FEATURE - remove before final release. This changes only the visual streak display and card tier.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_10rem_auto_auto]">
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Habit
+                  <select
+                    className="rounded-lg border border-line bg-ink/70 px-3 py-2 text-white outline-none transition focus:border-cyan/60"
+                    value={testingHabitId}
+                    onChange={(event) => updateTestingHabit(event.currentTarget.value)}
+                  >
+                    {visibleHabits.map((habit) => (
+                      <option key={habit.id} value={habit.id}>
+                        {habit.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Streak
+                  <input
+                    type="number"
+                    min={0}
+                    className="rounded-lg border border-line bg-ink/70 px-3 py-2 text-white outline-none transition focus:border-cyan/60"
+                    value={testingStreak}
+                    onChange={(event) => setTestingStreak(Number(event.currentTarget.value))}
+                  />
+                </label>
                 <button
-                  key={value}
                   type="button"
-                  className="dl-button rounded-full border border-line bg-white/[0.03] px-3 py-1 text-xs text-slate-300 hover:border-cyan/60 hover:text-cyan"
-                  onClick={() => setTestingStreak(value)}
+                  className="dl-button self-end rounded-lg bg-gradient-to-r from-cyan to-mint px-4 py-2 text-sm font-semibold text-slate-950 shadow-glow hover:brightness-110"
+                  disabled={!testingHabitId}
+                  onClick={() => setHabitTestingStreakOverride(testingHabitId, testingStreak)}
                 >
-                  {value} days
+                  Save Override
                 </button>
-              ))}
-            </div>
-          </article>
+                <button
+                  type="button"
+                  className="dl-button self-end rounded-lg border border-line bg-white/[0.03] px-4 py-2 text-sm text-slate-300 hover:border-cyan/60"
+                  disabled={!testingHabitId}
+                  onClick={() => {
+                    clearHabitTestingStreakOverride(testingHabitId);
+                    setTestingStreak(selectedTestingHabit?.currentStreak ?? 0);
+                  }}
+                >
+                  Reset
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[0, 7, 30, 60, 100, 180, 365].map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className="dl-button rounded-full border border-line bg-white/[0.03] px-3 py-1 text-xs text-slate-300 hover:border-cyan/60 hover:text-cyan"
+                    onClick={() => setTestingStreak(value)}
+                  >
+                    {value} days
+                  </button>
+                ))}
+              </div>
+            </article>
+          ) : null}
 
-          <article className="rounded-xl border border-coral/35 bg-coral/5 p-5 shadow-panel backdrop-blur-xl">
-            <div className="mb-3 flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-coral" />
-              <h2 className="font-semibold text-white">Danger Zone</h2>
-            </div>
-            <p className="text-sm text-slate-400">
-              Testing only. This clears local progress, logs, journal entries, mission completion, and streak protector usage.
-            </p>
-            <button
-              type="button"
-              className="dl-button mt-4 rounded-lg border border-coral/40 bg-coral/10 px-4 py-2 text-sm font-medium text-coral hover:bg-coral/15"
-              onClick={() => setResetOpen(true)}
-            >
-              Reset App Data
-            </button>
-          </article>
+          {DEV_MODE ? (
+            <article className="rounded-xl border border-coral/35 bg-coral/5 p-5 shadow-panel backdrop-blur-xl">
+              <div className="mb-3 flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-coral" />
+                <h2 className="font-semibold text-white">Danger Zone</h2>
+              </div>
+              <p className="text-sm text-slate-400">
+                Testing only. This clears local progress, logs, journal entries, mission completion, and streak protector usage.
+              </p>
+              <button
+                type="button"
+                className="dl-button mt-4 rounded-lg border border-coral/40 bg-coral/10 px-4 py-2 text-sm font-medium text-coral hover:bg-coral/15"
+                onClick={() => setResetOpen(true)}
+              >
+                Reset App Data
+              </button>
+            </article>
+          ) : null}
         </section>
 
-        {resetOpen ? (
+        {DEV_MODE && resetOpen ? (
           <div className="fixed inset-0 z-50 grid place-items-center bg-ink/82 p-4 backdrop-blur-xl">
             <section className="w-full max-w-lg rounded-xl border border-coral/40 bg-panel p-5 shadow-premium">
               <div className="mb-4 flex items-start justify-between gap-4">
