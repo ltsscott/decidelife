@@ -1,0 +1,432 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(56, 189, 248, 0.16), transparent 27rem),
+    radial-gradient(circle at 84% 10%, rgba(139, 92, 246, 0.12), transparent 26rem),
+    radial-gradient(circle at 70% 90%, rgba(45, 212, 191, 0.1), transparent 24rem),
+    linear-gradient(135deg, #040814 0%, #07111f 48%, #0b1020 100%);
+  color: #e5edf7;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(45, 212, 191, 0.35);
+}
+
+@layer components {
+  .dl-card {
+    @apply rounded-xl border border-line bg-panel-glass shadow-panel backdrop-blur-xl;
+  }
+
+  .dl-button {
+    @apply transition duration-200 active:scale-[0.98];
+  }
+
+  .ornate-card {
+    --frame: rgba(148, 163, 184, 0.22);
+    --frame-soft: rgba(148, 163, 184, 0.1);
+    --accent: #38bdf8;
+    --accent-2: #f8c14a;
+    --glow: rgba(56, 189, 248, 0.16);
+    --gem: #38bdf8;
+    position: relative;
+    overflow: visible;
+    isolation: isolate;
+  }
+
+  .ornate-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 0.9rem;
+    border: 1px solid var(--frame);
+    box-shadow:
+      inset 0 0 0 1px var(--frame-soft),
+      0 0 28px var(--glow);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .ornate-card::after {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    border-radius: 0.82rem;
+    background:
+      linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 35%, transparent), transparent) top / 100% 1px no-repeat,
+      linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent-2) 28%, transparent), transparent) bottom / 100% 1px no-repeat;
+    opacity: 0.75;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .ornate-card.tier-1 {
+    --frame: rgba(56, 189, 248, 0.72);
+    --frame-soft: rgba(248, 193, 74, 0.22);
+    --accent: #38bdf8;
+    --accent-2: #f8c14a;
+    --glow: rgba(56, 189, 248, 0.2);
+  }
+
+  .ornate-card.tier-2 {
+    --frame: rgba(248, 193, 74, 0.86);
+    --frame-soft: rgba(139, 92, 246, 0.28);
+    --accent: #f8c14a;
+    --accent-2: #a78bfa;
+    --glow: rgba(248, 193, 74, 0.32);
+    --gem: #a78bfa;
+  }
+
+  .ornate-card.tier-3 {
+    --frame: rgba(248, 193, 74, 0.92);
+    --frame-soft: rgba(217, 70, 239, 0.38);
+    --accent: #f8c14a;
+    --accent-2: #d946ef;
+    --glow: rgba(217, 70, 239, 0.28);
+    --gem: #d946ef;
+  }
+
+  .ornate-card.tier-4 {
+    --frame: rgba(248, 193, 74, 1);
+    --frame-soft: rgba(255, 255, 255, 0.2);
+    --accent: #f8c14a;
+    --accent-2: #fef3c7;
+    --glow: rgba(248, 193, 74, 0.42);
+    --gem: #a78bfa;
+  }
+
+  .ornate-card.tier-5 {
+    --frame: rgba(251, 146, 60, 1);
+    --frame-soft: rgba(248, 193, 74, 0.38);
+    --accent: #fb923c;
+    --accent-2: #f8c14a;
+    --glow: rgba(251, 146, 60, 0.46);
+    --gem: #fb923c;
+  }
+
+  .ornate-card.tier-6 {
+    --frame: rgba(56, 189, 248, 1);
+    --frame-soft: rgba(248, 193, 74, 0.48);
+    --accent: #38bdf8;
+    --accent-2: #f8c14a;
+    --glow: rgba(56, 189, 248, 0.5);
+    --gem: #60a5fa;
+  }
+
+  .ornate-card.tier-7 {
+    --frame: rgba(96, 165, 250, 1);
+    --frame-soft: rgba(248, 193, 74, 0.55);
+    --accent: #60a5fa;
+    --accent-2: #f8c14a;
+    --glow: rgba(96, 165, 250, 0.58);
+    --gem: #38bdf8;
+  }
+
+  .ornate-corner {
+    position: absolute;
+    width: 4.8rem;
+    height: 4.8rem;
+    pointer-events: none;
+    z-index: 4;
+    filter: drop-shadow(0 0 10px var(--glow));
+  }
+
+  .ornate-corner::before,
+  .ornate-corner::after {
+    content: "";
+    position: absolute;
+    background: linear-gradient(90deg, transparent, var(--frame), var(--accent-2), var(--frame));
+    box-shadow: 0 0 16px var(--glow), 0 0 2px var(--accent-2);
+  }
+
+  .ornate-corner::before {
+    height: 3px;
+    width: 100%;
+  }
+
+  .ornate-corner::after {
+    width: 3px;
+    height: 100%;
+  }
+
+  .ornate-corner.tl {
+    left: -1px;
+    top: -1px;
+  }
+
+  .ornate-corner.tr {
+    right: -1px;
+    top: -1px;
+    transform: scaleX(-1);
+  }
+
+  .ornate-corner.bl {
+    left: -1px;
+    bottom: -1px;
+    transform: scaleY(-1);
+  }
+
+  .ornate-corner.br {
+    right: -1px;
+    bottom: -1px;
+    transform: scale(-1);
+  }
+
+  .ornate-corner.tl::before,
+  .ornate-corner.tr::before,
+  .ornate-corner.bl::before,
+  .ornate-corner.br::before {
+    left: 0;
+    top: 0;
+  }
+
+  .ornate-corner.tl::after,
+  .ornate-corner.tr::after,
+  .ornate-corner.bl::after,
+  .ornate-corner.br::after {
+    left: 0;
+    top: 0;
+  }
+
+  .ornate-corner-mark {
+    position: absolute;
+    inset: 0.55rem auto auto 0.55rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    transform: rotate(45deg);
+    border: 1px solid var(--frame);
+    background: color-mix(in srgb, var(--gem) 45%, #050914);
+    box-shadow: 0 0 16px var(--glow);
+  }
+
+  .ornate-corner-flourish {
+    position: absolute;
+    width: 2.2rem;
+    height: 0.72rem;
+    border-top: 2px solid var(--accent-2);
+    border-radius: 999px 999px 0 0;
+    transform: rotate(-38deg);
+    transform-origin: left center;
+    opacity: 0.92;
+    filter: drop-shadow(0 0 10px var(--glow));
+  }
+
+  .ornate-corner-flourish.second {
+    width: 1.7rem;
+    top: 1.48rem;
+    left: 0.72rem;
+    opacity: 0.7;
+    transform: rotate(-52deg);
+  }
+
+  .ornate-rail {
+    position: absolute;
+    pointer-events: none;
+    z-index: 3;
+    background: linear-gradient(90deg, transparent, var(--frame), var(--accent-2), var(--frame), transparent);
+    box-shadow: 0 0 18px var(--glow);
+  }
+
+  .ornate-rail.top {
+    left: 3.2rem;
+    right: 3.2rem;
+    top: -1px;
+    height: 3px;
+  }
+
+  .ornate-rail.bottom {
+    left: 3.2rem;
+    right: 3.2rem;
+    bottom: -1px;
+    height: 3px;
+  }
+
+  .ornate-rail.inner-top {
+    left: 5.8rem;
+    right: 5.8rem;
+    top: 0.65rem;
+    height: 1px;
+    opacity: 0.68;
+  }
+
+  .ornate-rail.inner-bottom {
+    left: 5.8rem;
+    right: 5.8rem;
+    bottom: 0.65rem;
+    height: 1px;
+    opacity: 0.68;
+  }
+
+  .ornate-center {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    transform: translate(-50%, -50%);
+    color: var(--accent-2);
+    filter: drop-shadow(0 0 14px var(--glow));
+    pointer-events: none;
+  }
+
+  .ornate-center.bottom {
+    top: auto;
+    bottom: 0;
+    transform: translate(-50%, 50%);
+  }
+
+  .ornate-wing {
+    height: 1px;
+    width: 3.2rem;
+    background: linear-gradient(90deg, transparent, var(--frame));
+  }
+
+  .ornate-wing.right {
+    background: linear-gradient(90deg, var(--frame), transparent);
+  }
+
+  .ornate-gem {
+    width: 0.75rem;
+    height: 0.75rem;
+    transform: rotate(45deg);
+    border: 1px solid rgba(255, 255, 255, 0.58);
+    background: var(--gem);
+    box-shadow: 0 0 18px var(--glow);
+  }
+
+  .ornate-crown-plate {
+    display: grid;
+    place-items: center;
+    width: 3.25rem;
+    height: 1.65rem;
+    border: 1px solid var(--frame);
+    border-radius: 999px;
+    background:
+      radial-gradient(circle at center, color-mix(in srgb, var(--gem) 35%, transparent), transparent 52%),
+      rgba(5, 9, 20, 0.82);
+    box-shadow: 0 0 24px var(--glow), inset 0 0 0 1px var(--frame-soft);
+  }
+
+  .ornate-side {
+    position: absolute;
+    top: 50%;
+    z-index: 3;
+    width: 1px;
+    height: 44%;
+    transform: translateY(-50%);
+    background: linear-gradient(180deg, transparent, var(--frame), var(--accent-2), var(--frame), transparent);
+    box-shadow: 0 0 14px var(--glow);
+    pointer-events: none;
+  }
+
+  .ornate-side.left {
+    left: 0.55rem;
+  }
+
+  .ornate-side.right {
+    right: 0.55rem;
+  }
+
+  .ornate-spark {
+    position: absolute;
+    z-index: 6;
+    width: 0.18rem;
+    height: 0.18rem;
+    border-radius: 999px;
+    background: var(--accent-2);
+    box-shadow: 0 0 16px var(--accent-2);
+    animation: sparkle-float 2.7s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  .ornate-shine {
+    position: absolute;
+    inset-block: -25%;
+    left: -45%;
+    z-index: 2;
+    width: 38%;
+    transform: rotate(12deg);
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent-2) 22%, transparent), transparent);
+    animation: frame-shine 3.4s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  .crest-ring {
+    position: relative;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--frame);
+    background:
+      radial-gradient(circle at center, color-mix(in srgb, var(--accent) 22%, transparent), transparent 56%),
+      rgba(255, 255, 255, 0.035);
+    box-shadow:
+      inset 0 0 0 1px var(--frame-soft),
+      0 0 22px var(--glow);
+  }
+
+  .crest-ring::before {
+    content: "";
+    position: absolute;
+    inset: 0.32rem;
+    border-radius: inherit;
+    border: 1px solid color-mix(in srgb, var(--frame) 56%, transparent);
+  }
+
+  .progression-frame {
+    --frame: rgba(148, 163, 184, 0.22);
+    --frame-soft: rgba(148, 163, 184, 0.1);
+    --accent: #38bdf8;
+    --accent-2: #f8c14a;
+    --glow: rgba(56, 189, 248, 0.16);
+    --gem: #38bdf8;
+    position: relative;
+    overflow: visible;
+    isolation: isolate;
+  }
+}
+
+@keyframes frame-shine {
+  0% {
+    transform: translateX(-50%) rotate(12deg);
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translateX(420%) rotate(12deg);
+    opacity: 0;
+  }
+}
+
+@keyframes sparkle-float {
+  0%, 100% {
+    transform: translateY(0) scale(0.8);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translateY(-6px) scale(1.2);
+    opacity: 1;
+  }
+}
