@@ -11,6 +11,8 @@ create table if not exists public.profiles (
   total_xp integer not null default 0 check (total_xp >= 0),
   highest_level_reached integer not null default 1,
   current_title text not null default 'Initiate',
+  theme text not null default 'blue' check (theme in ('blue', 'black', 'red', 'green', 'gold')),
+  trading_account_type text not null default 'phase-1' check (trading_account_type in ('phase-1', 'phase-2', 'instant-funded', 'funded', 'live')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -40,6 +42,7 @@ create table if not exists public.habits (
   streak_multiplier_enabled boolean not null default true,
   archived boolean not null default false,
   testing_streak_override integer,
+  active_days integer[] not null default '{0,1,2,3,4,5,6}',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (user_id, id)
@@ -102,11 +105,69 @@ create table if not exists public.streak_protectors (
   unique (user_id, month)
 );
 
+alter table public.profiles add column if not exists theme text not null default 'blue';
+alter table public.profiles add column if not exists trading_account_type text not null default 'phase-1';
+alter table public.habits add column if not exists active_days integer[] not null default '{0,1,2,3,4,5,6}';
+
+create table if not exists public.trading_journal_entries (
+  id text not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  date date not null,
+  account_type text not null default 'phase-1' check (account_type in ('phase-1', 'phase-2', 'instant-funded', 'funded', 'live')),
+  profit_loss numeric not null default 0,
+  trade_count integer not null default 0,
+  execution_score integer not null default 5 check (execution_score between 1 and 10),
+  a_plus_setups integer not null default 0,
+  session text not null default '',
+  pairs text not null default '',
+  screenshots text[] not null default '{}',
+  general_notes text not null default '',
+  followed_rules boolean not null default true,
+  overtraded boolean not null default false,
+  moved_stop_loss boolean not null default false,
+  emotions_affected boolean not null default false,
+  biggest_mistake text not null default '',
+  best_decision text not null default '',
+  improve_tomorrow text not null default '',
+  detailed_review jsonb not null default '{}'::jsonb,
+  mistake_tags text[] not null default '{}',
+  positive_tags text[] not null default '{}',
+  broken_rule_ids text[] not null default '{}',
+  average_rr numeric not null default 0,
+  wins integer not null default 0,
+  losses integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, id),
+  unique (user_id, date)
+);
+
+create table if not exists public.trading_notes (
+  id text not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  date date not null,
+  body text not null default '',
+  created_at timestamptz not null default now(),
+  primary key (user_id, id)
+);
+
+create table if not exists public.trading_rules (
+  id text not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  text text not null,
+  archived boolean not null default false,
+  created_at timestamptz not null default now(),
+  primary key (user_id, id)
+);
+
 create index if not exists habits_user_order_idx on public.habits(user_id, order_position);
 create index if not exists habit_logs_user_date_idx on public.habit_logs(user_id, date);
 create index if not exists missions_user_status_idx on public.missions(user_id, locked, completed, archived);
 create index if not exists journal_entries_user_date_idx on public.journal_entries(user_id, date desc);
 create index if not exists streak_protectors_user_month_idx on public.streak_protectors(user_id, month);
+create index if not exists trading_journal_entries_user_date_idx on public.trading_journal_entries(user_id, date desc);
+create index if not exists trading_notes_user_date_idx on public.trading_notes(user_id, date desc);
+create index if not exists trading_rules_user_idx on public.trading_rules(user_id, archived);
 
 alter table public.profiles enable row level security;
 alter table public.user_progress enable row level security;
@@ -115,6 +176,9 @@ alter table public.habit_logs enable row level security;
 alter table public.missions enable row level security;
 alter table public.journal_entries enable row level security;
 alter table public.streak_protectors enable row level security;
+alter table public.trading_journal_entries enable row level security;
+alter table public.trading_notes enable row level security;
+alter table public.trading_rules enable row level security;
 
 drop policy if exists "profiles_select_own" on public.profiles;
 drop policy if exists "profiles_insert_own" on public.profiles;
@@ -185,3 +249,33 @@ create policy "streak_protectors_select_own" on public.streak_protectors for sel
 create policy "streak_protectors_insert_own" on public.streak_protectors for insert with check (auth.uid() = user_id);
 create policy "streak_protectors_update_own" on public.streak_protectors for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "streak_protectors_delete_own" on public.streak_protectors for delete using (auth.uid() = user_id);
+
+drop policy if exists "trading_journal_select_own" on public.trading_journal_entries;
+drop policy if exists "trading_journal_insert_own" on public.trading_journal_entries;
+drop policy if exists "trading_journal_update_own" on public.trading_journal_entries;
+drop policy if exists "trading_journal_delete_own" on public.trading_journal_entries;
+
+create policy "trading_journal_select_own" on public.trading_journal_entries for select using (auth.uid() = user_id);
+create policy "trading_journal_insert_own" on public.trading_journal_entries for insert with check (auth.uid() = user_id);
+create policy "trading_journal_update_own" on public.trading_journal_entries for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "trading_journal_delete_own" on public.trading_journal_entries for delete using (auth.uid() = user_id);
+
+drop policy if exists "trading_notes_select_own" on public.trading_notes;
+drop policy if exists "trading_notes_insert_own" on public.trading_notes;
+drop policy if exists "trading_notes_update_own" on public.trading_notes;
+drop policy if exists "trading_notes_delete_own" on public.trading_notes;
+
+create policy "trading_notes_select_own" on public.trading_notes for select using (auth.uid() = user_id);
+create policy "trading_notes_insert_own" on public.trading_notes for insert with check (auth.uid() = user_id);
+create policy "trading_notes_update_own" on public.trading_notes for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "trading_notes_delete_own" on public.trading_notes for delete using (auth.uid() = user_id);
+
+drop policy if exists "trading_rules_select_own" on public.trading_rules;
+drop policy if exists "trading_rules_insert_own" on public.trading_rules;
+drop policy if exists "trading_rules_update_own" on public.trading_rules;
+drop policy if exists "trading_rules_delete_own" on public.trading_rules;
+
+create policy "trading_rules_select_own" on public.trading_rules for select using (auth.uid() = user_id);
+create policy "trading_rules_insert_own" on public.trading_rules for insert with check (auth.uid() = user_id);
+create policy "trading_rules_update_own" on public.trading_rules for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "trading_rules_delete_own" on public.trading_rules for delete using (auth.uid() = user_id);

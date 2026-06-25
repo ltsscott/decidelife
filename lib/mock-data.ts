@@ -9,7 +9,11 @@ export const userProfile: UserProfile = {
   highestLevelReached: 2,
   totalXp: 1650,
   currentTitle: "Initiate",
-  createdAt: "2026-06-01"
+  createdAt: "2026-06-01",
+  theme: "blue",
+  tradingAccountType: "phase-1",
+  dailyBonusXp: 50,
+  reflectionReminderTime: "21:00"
 };
 
 export const habits: Habit[] = [
@@ -24,7 +28,8 @@ export const habits: Habit[] = [
     category: "fitness",
     baseXp: 100,
     streakMultiplierEnabled: true,
-    archived: false
+    archived: false,
+    activeDays: [0, 1, 2, 3, 4, 5, 6]
   },
   {
     id: "reading",
@@ -38,7 +43,8 @@ export const habits: Habit[] = [
     baseXp: 100,
     prerequisiteHabitId: "workout",
     streakMultiplierEnabled: true,
-    archived: false
+    archived: false,
+    activeDays: [0, 1, 2, 3, 4, 5, 6]
   },
   {
     id: "walking",
@@ -52,7 +58,8 @@ export const habits: Habit[] = [
     baseXp: 100,
     prerequisiteHabitId: "reading",
     streakMultiplierEnabled: true,
-    archived: false
+    archived: false,
+    activeDays: [1, 3, 5]
   },
   {
     id: "job-applications",
@@ -66,7 +73,8 @@ export const habits: Habit[] = [
     baseXp: 100,
     prerequisiteHabitId: "walking",
     streakMultiplierEnabled: true,
-    archived: false
+    archived: false,
+    activeDays: [1, 2, 3, 4, 5]
   },
   {
     id: "trading-study",
@@ -80,7 +88,8 @@ export const habits: Habit[] = [
     baseXp: 100,
     prerequisiteHabitId: "job-applications",
     streakMultiplierEnabled: true,
-    archived: false
+    archived: false,
+    activeDays: [1, 2, 3, 4, 5]
   },
   {
     id: "sleep-schedule",
@@ -94,7 +103,8 @@ export const habits: Habit[] = [
     baseXp: 100,
     prerequisiteHabitId: "trading-study",
     streakMultiplierEnabled: true,
-    archived: false
+    archived: false,
+    activeDays: [0, 1, 2, 3, 4, 5, 6]
   }
 ];
 
@@ -215,3 +225,50 @@ export const streakProtectorUsages: StreakProtectorUsage[] = [
     used: 0
   }
 ];
+
+export const tradingJournalEntries = [];
+
+export const tradingNotes = [];
+
+export const tradingRules = [
+  {
+    id: "rule-max-two-trades",
+    text: "Maximum 2 trades per day",
+    archived: false,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: "rule-no-revenge",
+    text: "Never revenge trade",
+    archived: false,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: "rule-no-stop-move",
+    text: "Never move stop loss",
+    archived: false,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: "rule-a-plus-only",
+    text: "Only trade A+ setups",
+    archived: false,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: "rule-risk-one-percent",
+    text: "Risk 1% maximum",
+    archived: false,
+    createdAt: new Date().toISOString()
+  }
+];
+
+export const personalQuotes = [
+  {
+    id: "quote-process",
+    text: "Process over outcome.",
+    createdAt: new Date().toISOString()
+  }
+];
+
+export const journeyMilestones = [];

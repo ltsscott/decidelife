@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, CheckSquare, Compass, LayoutDashboard, Settings, Target } from "lucide-react";
+import { BarChart3, BookOpen, CheckSquare, Compass, GitBranch, LayoutDashboard, Settings, Target } from "lucide-react";
 import { clsx } from "clsx";
 
 const items = [
@@ -10,6 +10,8 @@ const items = [
   { href: "/habits", label: "Habits", icon: CheckSquare },
   { href: "/missions", label: "Missions", icon: Target },
   { href: "/journal", label: "Journal", icon: BookOpen },
+  { href: "/trading", label: "Trading", icon: BarChart3 },
+  { href: "/journey", label: "Journey", icon: GitBranch },
   { href: "/settings", label: "Settings", icon: Settings }
 ];
 

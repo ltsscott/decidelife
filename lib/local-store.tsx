@@ -1,11 +1,11 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { habits as seedHabits, habitLogs as seedHabitLogs, journalEntries as seedJournalEntries, missions as seedMissions, streakProtectorUsages as seedProtectors, userProfile as seedProfile } from "@/lib/mock-data";
-import { calculateLevelProgress, getHabitCompletionXp, getProtectorUsageForCurrentMonth, unlockMissions } from "@/lib/progression";
+import { habits as seedHabits, habitLogs as seedHabitLogs, journalEntries as seedJournalEntries, journeyMilestones as seedJourneyMilestones, missions as seedMissions, personalQuotes as seedPersonalQuotes, streakProtectorUsages as seedProtectors, tradingJournalEntries as seedTradingJournalEntries, tradingNotes as seedTradingNotes, tradingRules as seedTradingRules, userProfile as seedProfile } from "@/lib/mock-data";
+import { calculateLevelProgress, getHabitCompletionXp, getProtectorUsageForCurrentMonth, getScheduledDailyCompletionPercentage, isHabitScheduledForDate, unlockMissions } from "@/lib/progression";
 import { hasSupabaseConfig, supabase } from "@/lib/supabase";
 import { loadSupabaseState, saveSupabaseState } from "@/lib/supabase-data";
-import type { Habit, HabitLog, JournalEntry, Mission, StreakProtectorUsage, UserProfile } from "@/types";
+import type { AppTheme, Habit, HabitLog, JournalEntry, JourneyMilestone, Mission, PersonalQuote, StreakProtectorUsage, TradingJournalEntry, TradingNote, TradingRule, UserProfile } from "@/types";
 import type { User } from "@supabase/supabase-js";
 
 interface DecideLifeState {
@@ -15,11 +15,16 @@ interface DecideLifeState {
   missions: Mission[];
   journalEntries: JournalEntry[];
   protectors: StreakProtectorUsage[];
+  tradingJournalEntries: TradingJournalEntry[];
+  tradingNotes: TradingNote[];
+  tradingRules: TradingRule[];
+  personalQuotes: PersonalQuote[];
+  journeyMilestones: JourneyMilestone[];
   lastHabitReviewDate: string;
 }
 
 interface DecideLifeContextValue extends DecideLifeState {
-  completeHabit: (habitId: string, date?: string) => void;
+  completeHabit: (habitId: string, date?: string, durationMinutes?: number) => void;
   missHabit: (habitId: string, date?: string) => void;
   saveHabit: (habit: Habit) => void;
   archiveHabit: (habitId: string) => void;
@@ -29,6 +34,19 @@ interface DecideLifeContextValue extends DecideLifeState {
   saveJournalEntry: (entry: JournalEntry) => void;
   deleteJournalEntry: (entryId: string) => void;
   resetAppData: () => void;
+  resetDecideLife: () => void;
+  setTheme: (theme: AppTheme) => void;
+  setTradingAccountType: (accountType: UserProfile["tradingAccountType"]) => void;
+  saveTradingJournalEntry: (entry: TradingJournalEntry) => void;
+  saveTradingNote: (note: TradingNote) => void;
+  deleteTradingNote: (noteId: string) => void;
+  saveTradingRule: (rule: TradingRule) => void;
+  savePersonalQuote: (quote: PersonalQuote) => void;
+  deletePersonalQuote: (quoteId: string) => void;
+  saveJourneyMilestone: (milestone: JourneyMilestone) => void;
+  deleteJourneyMilestone: (milestoneId: string) => void;
+  markMorningBriefViewed: (date: string) => void;
+  awardDailyVictory: (date: string) => void;
   setHabitTestingStreakOverride: (habitId: string, streak: number) => void;
   clearHabitTestingStreakOverride: (habitId: string) => void;
   dismissNotification: () => void;
@@ -53,6 +71,11 @@ function createInitialState(): DecideLifeState {
     missions: clone(seedMissions),
     journalEntries: clone(seedJournalEntries),
     protectors: clone(seedProtectors),
+    tradingJournalEntries: clone(seedTradingJournalEntries),
+    tradingNotes: clone(seedTradingNotes),
+    tradingRules: clone(seedTradingRules),
+    personalQuotes: clone(seedPersonalQuotes),
+    journeyMilestones: clone(seedJourneyMilestones),
     lastHabitReviewDate: today()
   };
 }
@@ -78,6 +101,11 @@ function createFreshState(): DecideLifeState {
     })),
     journalEntries: [],
     protectors: [],
+    tradingJournalEntries: [],
+    tradingNotes: [],
+    tradingRules: clone(seedTradingRules),
+    personalQuotes: clone(seedPersonalQuotes),
+    journeyMilestones: [],
     lastHabitReviewDate: today()
   };
 }
@@ -108,6 +136,13 @@ function compareDates(a: string, b: string) {
 function normalizeState(state: DecideLifeState): DecideLifeState {
   return {
     ...state,
+    profile: {
+      ...state.profile,
+      theme: state.profile.theme ?? "blue",
+      tradingAccountType: state.profile.tradingAccountType ?? "phase-1",
+      dailyBonusXp: state.profile.dailyBonusXp ?? 50,
+      reflectionReminderTime: state.profile.reflectionReminderTime ?? "21:00"
+    },
     lastHabitReviewDate: state.lastHabitReviewDate ?? today(),
     habits: state.habits.map((habit, index) => ({
       ...habit,
@@ -115,7 +150,10 @@ function normalizeState(state: DecideLifeState): DecideLifeState {
       baseXp: habit.baseXp ?? 100,
       streakMultiplierEnabled: habit.streakMultiplierEnabled ?? true,
       archived: habit.archived ?? false,
-      testingStreakOverride: habit.testingStreakOverride
+      testingStreakOverride: habit.testingStreakOverride,
+      activeDays: habit.activeDays?.length ? habit.activeDays : [0, 1, 2, 3, 4, 5, 6],
+      reminderTime: habit.reminderTime,
+      sessionMinutes: habit.sessionMinutes
     })),
     missions: state.missions.map((mission) => ({
       ...mission,
@@ -124,6 +162,11 @@ function normalizeState(state: DecideLifeState): DecideLifeState {
       unlocksMissionIds: mission.unlocksMissionIds ?? [],
       archived: mission.archived ?? false
     })),
+    tradingJournalEntries: state.tradingJournalEntries ?? [],
+    tradingNotes: state.tradingNotes ?? [],
+    tradingRules: state.tradingRules?.length ? state.tradingRules : clone(seedTradingRules),
+    personalQuotes: state.personalQuotes ?? [],
+    journeyMilestones: state.journeyMilestones ?? [],
     habitLogs: (state.habitLogs ?? [])
       .filter((log) => !(log.id === "log-1" && log.habitId === "workout" && log.date === today()))
       .map((log) => {
@@ -212,12 +255,16 @@ function recalculateHabitStreaks(habits: Habit[], habitLogs: HabitLog[], current
         .filter((log) => log.habitId === habit.id)
         .map((log) => [log.date, log])
     );
-    let cursor = logsByDate.get(currentDate)?.status === "completed" || logsByDate.get(currentDate)?.status === "protected"
+    let cursor = isHabitScheduledForDate(habit, currentDate) && (logsByDate.get(currentDate)?.status === "completed" || logsByDate.get(currentDate)?.status === "protected")
       ? currentDate
       : addDays(currentDate, -1);
     let currentStreak = 0;
 
     while (true) {
+      if (!isHabitScheduledForDate(habit, cursor)) {
+        cursor = addDays(cursor, -1);
+        continue;
+      }
       const log = logsByDate.get(cursor);
       if (!log || (log.status !== "completed" && log.status !== "protected")) break;
       currentStreak += 1;
@@ -250,6 +297,7 @@ function recalculateHabitXp(habits: Habit[], habitLogs: HabitLog[]) {
     .map((log) => {
       const habit = habitsById.get(log.habitId);
       if (!habit) return log;
+      if (!isHabitScheduledForDate(habit, log.date)) return { ...log, xpDelta: 0, usedProtector: false };
       const currentRun = streakByHabit.get(log.habitId) ?? 0;
       if (log.status === "completed") {
         const nextRun = currentRun + 1;
@@ -296,7 +344,7 @@ function closePendingPreviousDays(state: DecideLifeState) {
   const activeHabits = state.habits.filter((habit) => habit.unlocked && !habit.archived);
 
   while (compareDates(cursor, currentDate) < 0) {
-    activeHabits.forEach((habit) => {
+    activeHabits.filter((habit) => isHabitScheduledForDate(habit, cursor)).forEach((habit) => {
       const existing = nextLogs.find((log) => log.habitId === habit.id && log.date === cursor);
       if (existing && existing.status !== "pending") return;
 
@@ -378,6 +426,10 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = state.profile.theme ?? "blue";
+  }, [state.profile.theme]);
+
   const updateState = (updater: (current: DecideLifeState) => DecideLifeState) => {
     setState((current) => {
       const next = updater(current);
@@ -392,18 +444,18 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const completeHabit = (habitId: string, date = today()) => {
+  const completeHabit = (habitId: string, date = today(), durationMinutes?: number) => {
     updateState((current) => {
       const existingLog = current.habitLogs.find((log) => log.habitId === habitId && log.date === date);
       if (existingLog?.status === "completed") return current;
       const habit = current.habits.find((item) => item.id === habitId);
-      if (!habit || !habit.unlocked || habit.archived) return current;
+      if (!habit || !habit.unlocked || habit.archived || !isHabitScheduledForDate(habit, date)) return current;
 
       const logs = current.habitLogs.filter((log) => !(log.habitId === habitId && log.date === date));
       const protectors = existingLog?.usedProtector ? changeProtectorUsage(current.protectors, date, -1) : current.protectors;
       let next = finalizeHabitState(
         current,
-        [...logs, { id: existingLog?.id ?? `log-${habitId}-${date}`, habitId, date, status: "completed", xpDelta: 0, usedProtector: false }],
+        [...logs, { id: existingLog?.id ?? `log-${habitId}-${date}`, habitId, date, status: "completed", xpDelta: 0, usedProtector: false, durationMinutes }],
         protectors
       );
 
@@ -423,7 +475,7 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
       const existingLog = current.habitLogs.find((log) => log.habitId === habitId && log.date === date);
       if (existingLog?.status === "missed") return current;
       const habit = current.habits.find((item) => item.id === habitId);
-      if (!habit || !habit.unlocked || habit.archived) return current;
+      if (!habit || !habit.unlocked || habit.archived || !isHabitScheduledForDate(habit, date)) return current;
 
       const logs = current.habitLogs.filter((log) => !(log.habitId === habitId && log.date === date));
       const protectors = existingLog?.usedProtector ? changeProtectorUsage(current.protectors, date, -1) : current.protectors;
@@ -444,13 +496,17 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
         currentStreak: habit.currentStreak ?? 0,
         bestStreak: habit.bestStreak ?? 0,
         streakMultiplierEnabled: habit.streakMultiplierEnabled ?? true,
-        archived: habit.archived ?? false
+        archived: habit.archived ?? false,
+        activeDays: habit.activeDays?.length ? habit.activeDays : [0, 1, 2, 3, 4, 5, 6],
+        reminderTime: habit.reminderTime,
+        sessionMinutes: habit.sessionMinutes
       };
       const exists = current.habits.some((item) => item.id === normalizedHabit.id);
       const habits = exists
         ? current.habits.map((item) => (item.id === normalizedHabit.id ? normalizedHabit : item))
         : [...current.habits, normalizedHabit];
-      return { ...current, habits: habits.sort((a, b) => a.order - b.order) };
+      const nextState = { ...current, habits: habits.sort((a, b) => a.order - b.order) };
+      return finalizeHabitState(nextState, nextState.habitLogs, nextState.protectors);
     });
   };
 
@@ -521,6 +577,103 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
     }));
   };
 
+  const setTheme = (theme: AppTheme) => {
+    updateState((current) => ({
+      ...current,
+      profile: { ...current.profile, theme }
+    }));
+  };
+
+  const setTradingAccountType = (accountType: UserProfile["tradingAccountType"]) => {
+    updateState((current) => ({
+      ...current,
+      profile: { ...current.profile, tradingAccountType: accountType }
+    }));
+  };
+
+  const saveTradingJournalEntry = (entry: TradingJournalEntry) => {
+    updateState((current) => {
+      const entries = current.tradingJournalEntries.some((item) => item.id === entry.id)
+        ? current.tradingJournalEntries.map((item) => (item.id === entry.id ? entry : item))
+        : [entry, ...current.tradingJournalEntries];
+      return { ...current, tradingJournalEntries: entries };
+    });
+  };
+
+  const saveTradingNote = (note: TradingNote) => {
+    updateState((current) => {
+      const notes = current.tradingNotes.some((item) => item.id === note.id)
+        ? current.tradingNotes.map((item) => (item.id === note.id ? note : item))
+        : [note, ...current.tradingNotes];
+      return { ...current, tradingNotes: notes };
+    });
+  };
+
+  const deleteTradingNote = (noteId: string) => {
+    updateState((current) => ({
+      ...current,
+      tradingNotes: current.tradingNotes.filter((note) => note.id !== noteId)
+    }));
+  };
+
+  const saveTradingRule = (rule: TradingRule) => {
+    updateState((current) => {
+      const rules = current.tradingRules.some((item) => item.id === rule.id)
+        ? current.tradingRules.map((item) => (item.id === rule.id ? rule : item))
+        : [rule, ...current.tradingRules];
+      return { ...current, tradingRules: rules };
+    });
+  };
+
+  const savePersonalQuote = (quote: PersonalQuote) => {
+    updateState((current) => {
+      const quotes = current.personalQuotes.some((item) => item.id === quote.id)
+        ? current.personalQuotes.map((item) => (item.id === quote.id ? quote : item))
+        : [quote, ...current.personalQuotes];
+      return { ...current, personalQuotes: quotes };
+    });
+  };
+
+  const deletePersonalQuote = (quoteId: string) => {
+    updateState((current) => ({
+      ...current,
+      personalQuotes: current.personalQuotes.filter((quote) => quote.id !== quoteId)
+    }));
+  };
+
+  const saveJourneyMilestone = (milestone: JourneyMilestone) => {
+    updateState((current) => {
+      const milestones = current.journeyMilestones.some((item) => item.id === milestone.id)
+        ? current.journeyMilestones.map((item) => (item.id === milestone.id ? milestone : item))
+        : [milestone, ...current.journeyMilestones];
+      return { ...current, journeyMilestones: milestones };
+    });
+  };
+
+  const deleteJourneyMilestone = (milestoneId: string) => {
+    updateState((current) => ({
+      ...current,
+      journeyMilestones: current.journeyMilestones.filter((milestone) => milestone.id !== milestoneId)
+    }));
+  };
+
+  const markMorningBriefViewed = (date: string) => {
+    updateState((current) => ({
+      ...current,
+      profile: { ...current.profile, lastMorningBriefDate: date }
+    }));
+  };
+
+  const awardDailyVictory = (date: string) => {
+    updateState((current) => {
+      if (current.profile.lastDailyVictoryDate === date) return current;
+      return {
+        ...current,
+        profile: applyXp({ ...current.profile, lastDailyVictoryDate: date }, current.profile.dailyBonusXp ?? 50)
+      };
+    });
+  };
+
   const resetAppData = () => {
     const freshState = supabaseUser ? attachSupabaseUser(createFreshState(), supabaseUser) : createFreshState();
     setNotification(null);
@@ -535,6 +688,18 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
       window.localStorage.removeItem(STORAGE_KEY);
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(freshState));
       window.location.assign("/dashboard");
+    }
+  };
+
+  const resetDecideLife = () => {
+    const freshState = supabaseUser ? attachSupabaseUser(createFreshState(), supabaseUser) : createFreshState();
+    setNotification(null);
+    setState(freshState);
+    saveState(freshState);
+    if (supabaseUser) {
+      void saveSupabaseState(supabaseUser.id, freshState).catch((error) => {
+        console.warn("DecideLife Supabase reset save failed. Local fallback was reset.", error);
+      });
     }
   };
 
@@ -563,8 +728,13 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<DecideLifeContextValue>(() => {
     const currentUsage = getProtectorUsageForCurrentMonth(state.protectors);
+    const todayDate = today();
     const todayCompletedHabitIds = state.habitLogs
-      .filter((log) => log.date === today() && log.status === "completed")
+      .filter((log) => log.date === todayDate && log.status === "completed")
+      .filter((log) => {
+        const habit = state.habits.find((item) => item.id === log.habitId);
+        return habit ? isHabitScheduledForDate(habit, todayDate) : false;
+      })
       .map((log) => log.habitId);
 
     return {
@@ -584,6 +754,19 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
       saveJournalEntry,
       deleteJournalEntry,
       resetAppData,
+      resetDecideLife,
+      setTheme,
+      setTradingAccountType,
+      saveTradingJournalEntry,
+      saveTradingNote,
+      deleteTradingNote,
+      saveTradingRule,
+      savePersonalQuote,
+      deletePersonalQuote,
+      saveJourneyMilestone,
+      deleteJourneyMilestone,
+      markMorningBriefViewed,
+      awardDailyVictory,
       setHabitTestingStreakOverride,
       clearHabitTestingStreakOverride
     };

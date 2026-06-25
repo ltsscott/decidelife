@@ -67,7 +67,7 @@ export default function HabitsPage() {
               key={habit.id}
               habit={habit}
               log={habitLogs.find((log) => log.habitId === habit.id && log.date === logDate)}
-              onComplete={(habitId) => completeHabit(habitId, logDate)}
+              onComplete={(habitId, durationMinutes) => completeHabit(habitId, logDate, durationMinutes)}
               onMiss={(habitId) => missHabit(habitId, logDate)}
               onEdit={(item) => {
                 setEditingHabit(item);

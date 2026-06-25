@@ -1,6 +1,6 @@
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import type { Habit, HabitLog, JournalEntry, Mission, StreakProtectorUsage, UserProfile } from "@/types";
+import type { Habit, HabitLog, JournalEntry, JourneyMilestone, Mission, PersonalQuote, StreakProtectorUsage, TradingJournalEntry, TradingNote, TradingRule, UserProfile } from "@/types";
 
 export interface DecideLifeRemoteState {
   profile: UserProfile;
@@ -9,6 +9,11 @@ export interface DecideLifeRemoteState {
   missions: Mission[];
   journalEntries: JournalEntry[];
   protectors: StreakProtectorUsage[];
+  tradingJournalEntries: TradingJournalEntry[];
+  tradingNotes: TradingNote[];
+  tradingRules: TradingRule[];
+  personalQuotes: PersonalQuote[];
+  journeyMilestones: JourneyMilestone[];
   lastHabitReviewDate: string;
 }
 
@@ -27,6 +32,9 @@ type HabitRow = {
   streak_multiplier_enabled: boolean;
   archived: boolean;
   testing_streak_override: number | null;
+  active_days: number[] | null;
+  reminder_time: string | null;
+  session_minutes: number | null;
 };
 
 type HabitLogRow = {
@@ -73,6 +81,70 @@ type ProtectorRow = {
   used: number;
 };
 
+type TradingJournalRow = {
+  id: string;
+  user_id: string;
+  date: string;
+  account_type: UserProfile["tradingAccountType"];
+  profit_loss: number;
+  trade_count: number;
+  execution_score: number;
+  a_plus_setups: number;
+  session: string;
+  pairs: string;
+  screenshots: string[] | null;
+  general_notes: string;
+  followed_rules: boolean;
+  overtraded: boolean;
+  moved_stop_loss: boolean;
+  emotions_affected: boolean;
+  biggest_mistake: string;
+  best_decision: string;
+  improve_tomorrow: string;
+  detailed_review: TradingJournalEntry["detailedReview"];
+  mistake_tags: string[] | null;
+  positive_tags: string[] | null;
+  broken_rule_ids: string[] | null;
+  average_rr: number;
+  wins: number;
+  losses: number;
+  updated_at: string;
+};
+
+type TradingNoteRow = {
+  id: string;
+  user_id: string;
+  date: string;
+  body: string;
+  created_at: string;
+};
+
+type TradingRuleRow = {
+  id: string;
+  user_id: string;
+  text: string;
+  archived: boolean;
+  created_at: string;
+};
+
+type PersonalQuoteRow = {
+  id: string;
+  user_id: string;
+  text: string;
+  created_at: string;
+};
+
+type JourneyMilestoneRow = {
+  id: string;
+  user_id: string;
+  date: string;
+  title: string;
+  type: JourneyMilestone["type"];
+  notes: string;
+  photo: string | null;
+  created_at: string;
+};
+
 function withUserProfile(profile: UserProfile, user: User): UserProfile {
   return {
     ...profile,
@@ -96,7 +168,10 @@ function habitToRow(habit: Habit, userId: string): HabitRow {
     prerequisite_habit_id: habit.prerequisiteHabitId ?? null,
     streak_multiplier_enabled: habit.streakMultiplierEnabled,
     archived: habit.archived,
-    testing_streak_override: habit.testingStreakOverride ?? null
+    testing_streak_override: habit.testingStreakOverride ?? null,
+    active_days: habit.activeDays,
+    reminder_time: habit.reminderTime ?? null,
+    session_minutes: habit.sessionMinutes ?? null
   };
 }
 
@@ -114,7 +189,10 @@ function rowToHabit(row: HabitRow): Habit {
     prerequisiteHabitId: row.prerequisite_habit_id ?? undefined,
     streakMultiplierEnabled: row.streak_multiplier_enabled,
     archived: row.archived,
-    testingStreakOverride: row.testing_streak_override ?? undefined
+    testingStreakOverride: row.testing_streak_override ?? undefined,
+    activeDays: row.active_days?.length ? row.active_days : [0, 1, 2, 3, 4, 5, 6],
+    reminderTime: row.reminder_time ?? undefined,
+    sessionMinutes: row.session_minutes ?? undefined
   };
 }
 
@@ -219,6 +297,156 @@ function rowToProtector(row: ProtectorRow): StreakProtectorUsage {
   };
 }
 
+function tradingJournalToRow(entry: TradingJournalEntry, userId: string): TradingJournalRow {
+  return {
+    id: entry.id,
+    user_id: userId,
+    date: entry.date,
+    account_type: entry.accountType,
+    profit_loss: entry.profitLoss,
+    trade_count: entry.tradeCount,
+    execution_score: entry.executionScore,
+    a_plus_setups: entry.aPlusSetups,
+    session: entry.session,
+    pairs: entry.pairs,
+    screenshots: entry.screenshots,
+    general_notes: entry.generalNotes,
+    followed_rules: entry.followedRules,
+    overtraded: entry.overtraded,
+    moved_stop_loss: entry.movedStopLoss,
+    emotions_affected: entry.emotionsAffected,
+    biggest_mistake: entry.biggestMistake,
+    best_decision: entry.bestDecision,
+    improve_tomorrow: entry.improveTomorrow,
+    detailed_review: entry.detailedReview,
+    mistake_tags: entry.mistakeTags,
+    positive_tags: entry.positiveTags,
+    broken_rule_ids: entry.brokenRuleIds,
+    average_rr: entry.averageRr,
+    wins: entry.wins,
+    losses: entry.losses,
+    updated_at: entry.updatedAt
+  };
+}
+
+function rowToTradingJournal(row: TradingJournalRow): TradingJournalEntry {
+  return {
+    id: row.id,
+    date: row.date,
+    accountType: row.account_type,
+    profitLoss: row.profit_loss,
+    tradeCount: row.trade_count,
+    executionScore: row.execution_score,
+    aPlusSetups: row.a_plus_setups,
+    session: row.session,
+    pairs: row.pairs,
+    screenshots: row.screenshots ?? [],
+    generalNotes: row.general_notes,
+    followedRules: row.followed_rules,
+    overtraded: row.overtraded,
+    movedStopLoss: row.moved_stop_loss,
+    emotionsAffected: row.emotions_affected,
+    biggestMistake: row.biggest_mistake,
+    bestDecision: row.best_decision,
+    improveTomorrow: row.improve_tomorrow,
+    detailedReview: row.detailed_review ?? {
+      preMarket: "",
+      tradePlanning: "",
+      duringTrade: "",
+      afterTrade: "",
+      endOfDay: "",
+      improvementFocus: ""
+    },
+    mistakeTags: row.mistake_tags ?? [],
+    positiveTags: row.positive_tags ?? [],
+    brokenRuleIds: row.broken_rule_ids ?? [],
+    averageRr: row.average_rr,
+    wins: row.wins,
+    losses: row.losses,
+    updatedAt: row.updated_at
+  };
+}
+
+function tradingNoteToRow(note: TradingNote, userId: string): TradingNoteRow {
+  return {
+    id: note.id,
+    user_id: userId,
+    date: note.date,
+    body: note.body,
+    created_at: note.createdAt
+  };
+}
+
+function rowToTradingNote(row: TradingNoteRow): TradingNote {
+  return {
+    id: row.id,
+    date: row.date,
+    body: row.body,
+    createdAt: row.created_at
+  };
+}
+
+function tradingRuleToRow(rule: TradingRule, userId: string): TradingRuleRow {
+  return {
+    id: rule.id,
+    user_id: userId,
+    text: rule.text,
+    archived: rule.archived,
+    created_at: rule.createdAt
+  };
+}
+
+function rowToTradingRule(row: TradingRuleRow): TradingRule {
+  return {
+    id: row.id,
+    text: row.text,
+    archived: row.archived,
+    createdAt: row.created_at
+  };
+}
+
+function quoteToRow(quote: PersonalQuote, userId: string): PersonalQuoteRow {
+  return {
+    id: quote.id,
+    user_id: userId,
+    text: quote.text,
+    created_at: quote.createdAt
+  };
+}
+
+function rowToQuote(row: PersonalQuoteRow): PersonalQuote {
+  return {
+    id: row.id,
+    text: row.text,
+    createdAt: row.created_at
+  };
+}
+
+function milestoneToRow(milestone: JourneyMilestone, userId: string): JourneyMilestoneRow {
+  return {
+    id: milestone.id,
+    user_id: userId,
+    date: milestone.date,
+    title: milestone.title,
+    type: milestone.type,
+    notes: milestone.notes,
+    photo: milestone.photo ?? null,
+    created_at: milestone.createdAt
+  };
+}
+
+function rowToMilestone(row: JourneyMilestoneRow): JourneyMilestone {
+  return {
+    id: row.id,
+    date: row.date,
+    title: row.title,
+    type: row.type,
+    notes: row.notes,
+    photo: row.photo ?? undefined,
+    createdAt: row.created_at
+  };
+}
+
 export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteState) {
   if (!supabase) return fallback;
 
@@ -229,7 +457,12 @@ export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteSt
     logsResult,
     missionsResult,
     journalResult,
-    protectorsResult
+    protectorsResult,
+    tradingJournalResult,
+    tradingNotesResult,
+    tradingRulesResult,
+    quotesResult,
+    milestonesResult
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     supabase.from("user_progress").select("*").eq("user_id", user.id).maybeSingle(),
@@ -237,7 +470,12 @@ export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteSt
     supabase.from("habit_logs").select("*").eq("user_id", user.id).order("date"),
     supabase.from("missions").select("*").eq("user_id", user.id),
     supabase.from("journal_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }),
-    supabase.from("streak_protectors").select("*").eq("user_id", user.id)
+    supabase.from("streak_protectors").select("*").eq("user_id", user.id),
+    supabase.from("trading_journal_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }),
+    supabase.from("trading_notes").select("*").eq("user_id", user.id).order("date", { ascending: false }),
+    supabase.from("trading_rules").select("*").eq("user_id", user.id),
+    supabase.from("personal_quotes").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+    supabase.from("journey_milestones").select("*").eq("user_id", user.id).order("date", { ascending: false })
   ]);
 
   if (
@@ -266,7 +504,13 @@ export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteSt
       currentLevel: progress?.current_level ?? fallback.profile.currentLevel,
       highestLevelReached: progress?.highest_level_reached ?? fallback.profile.highestLevelReached,
       currentTitle: progress?.current_title ?? fallback.profile.currentTitle,
-      createdAt: profileResult.data?.created_at ?? fallback.profile.createdAt
+      createdAt: profileResult.data?.created_at ?? fallback.profile.createdAt,
+      theme: profileResult.data?.theme ?? fallback.profile.theme,
+      tradingAccountType: profileResult.data?.trading_account_type ?? fallback.profile.tradingAccountType,
+      dailyBonusXp: profileResult.data?.daily_bonus_xp ?? fallback.profile.dailyBonusXp,
+      reflectionReminderTime: profileResult.data?.reflection_reminder_time ?? fallback.profile.reflectionReminderTime,
+      lastMorningBriefDate: profileResult.data?.last_morning_brief_date ?? fallback.profile.lastMorningBriefDate,
+      lastDailyVictoryDate: profileResult.data?.last_daily_victory_date ?? fallback.profile.lastDailyVictoryDate
     },
     user
   );
@@ -278,6 +522,11 @@ export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteSt
     missions: missionsResult.data?.length ? (missionsResult.data as MissionRow[]).map(rowToMission) : fallback.missions,
     journalEntries: journalResult.data?.length ? (journalResult.data as JournalEntryRow[]).map(rowToJournalEntry) : fallback.journalEntries,
     protectors: protectorsResult.data?.length ? (protectorsResult.data as ProtectorRow[]).map(rowToProtector) : fallback.protectors,
+    tradingJournalEntries: tradingJournalResult.data?.length ? (tradingJournalResult.data as TradingJournalRow[]).map(rowToTradingJournal) : fallback.tradingJournalEntries,
+    tradingNotes: tradingNotesResult.data?.length ? (tradingNotesResult.data as TradingNoteRow[]).map(rowToTradingNote) : fallback.tradingNotes,
+    tradingRules: tradingRulesResult.data?.length ? (tradingRulesResult.data as TradingRuleRow[]).map(rowToTradingRule) : fallback.tradingRules,
+    personalQuotes: quotesResult.data?.length ? (quotesResult.data as PersonalQuoteRow[]).map(rowToQuote) : fallback.personalQuotes,
+    journeyMilestones: milestonesResult.data?.length ? (milestonesResult.data as JourneyMilestoneRow[]).map(rowToMilestone) : fallback.journeyMilestones,
     lastHabitReviewDate: progress?.last_habit_review_date ?? fallback.lastHabitReviewDate
   };
 }
@@ -293,6 +542,12 @@ export async function saveSupabaseState(userId: string, state: DecideLifeRemoteS
     total_xp: state.profile.totalXp,
     highest_level_reached: state.profile.highestLevelReached,
     current_title: state.profile.currentTitle,
+    theme: state.profile.theme,
+    trading_account_type: state.profile.tradingAccountType,
+    daily_bonus_xp: state.profile.dailyBonusXp,
+    reflection_reminder_time: state.profile.reflectionReminderTime ?? null,
+    last_morning_brief_date: state.profile.lastMorningBriefDate ?? null,
+    last_daily_victory_date: state.profile.lastDailyVictoryDate ?? null,
     created_at: state.profile.createdAt,
     updated_at: new Date().toISOString()
   };
@@ -315,7 +570,12 @@ export async function saveSupabaseState(userId: string, state: DecideLifeRemoteS
     supabase.from("habits").delete().eq("user_id", userId),
     supabase.from("missions").delete().eq("user_id", userId),
     supabase.from("journal_entries").delete().eq("user_id", userId),
-    supabase.from("streak_protectors").delete().eq("user_id", userId)
+    supabase.from("streak_protectors").delete().eq("user_id", userId),
+    supabase.from("trading_journal_entries").delete().eq("user_id", userId),
+    supabase.from("trading_notes").delete().eq("user_id", userId),
+    supabase.from("trading_rules").delete().eq("user_id", userId),
+    supabase.from("personal_quotes").delete().eq("user_id", userId),
+    supabase.from("journey_milestones").delete().eq("user_id", userId)
   ]);
 
   await Promise.all([
@@ -323,6 +583,11 @@ export async function saveSupabaseState(userId: string, state: DecideLifeRemoteS
     state.habitLogs.length ? supabase.from("habit_logs").insert(state.habitLogs.map((log) => habitLogToRow(log, userId))) : Promise.resolve(),
     state.missions.length ? supabase.from("missions").insert(state.missions.map((mission) => missionToRow(mission, userId))) : Promise.resolve(),
     state.journalEntries.length ? supabase.from("journal_entries").insert(state.journalEntries.map((entry) => journalEntryToRow(entry, userId))) : Promise.resolve(),
-    state.protectors.length ? supabase.from("streak_protectors").insert(state.protectors.map((usage) => protectorToRow(usage, userId))) : Promise.resolve()
+    state.protectors.length ? supabase.from("streak_protectors").insert(state.protectors.map((usage) => protectorToRow(usage, userId))) : Promise.resolve(),
+    state.tradingJournalEntries.length ? supabase.from("trading_journal_entries").insert(state.tradingJournalEntries.map((entry) => tradingJournalToRow(entry, userId))) : Promise.resolve(),
+    state.tradingNotes.length ? supabase.from("trading_notes").insert(state.tradingNotes.map((note) => tradingNoteToRow(note, userId))) : Promise.resolve(),
+    state.tradingRules.length ? supabase.from("trading_rules").insert(state.tradingRules.map((rule) => tradingRuleToRow(rule, userId))) : Promise.resolve(),
+    state.personalQuotes.length ? supabase.from("personal_quotes").insert(state.personalQuotes.map((quote) => quoteToRow(quote, userId))) : Promise.resolve(),
+    state.journeyMilestones.length ? supabase.from("journey_milestones").insert(state.journeyMilestones.map((milestone) => milestoneToRow(milestone, userId))) : Promise.resolve()
   ]);
 }

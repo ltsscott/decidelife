@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Check, Crown, Dumbbell, Flame, Gem, Pencil, Sparkles, Star, Trash2, Trophy, X } from "lucide-react";
 import { clsx } from "clsx";
 import { DEV_MODE } from "@/lib/dev-mode";
@@ -9,11 +10,57 @@ import type { Habit, HabitLog } from "@/types";
 interface HabitCardProps {
   habit: Habit;
   log?: HabitLog;
-  onComplete?: (habitId: string) => void;
+  onComplete?: (habitId: string, durationMinutes?: number) => void;
   onMiss?: (habitId: string) => void;
   onEdit?: (habit: Habit) => void;
   onArchive?: (habitId: string) => void;
   compact?: boolean;
+}
+
+function HabitTimer({ habit, onComplete }: { habit: Habit; onComplete?: (habitId: string, durationMinutes?: number) => void }) {
+  const minutes = habit.sessionMinutes ?? 0;
+  const [remaining, setRemaining] = useState(minutes * 60);
+  const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    setRemaining(minutes * 60);
+    setRunning(false);
+  }, [minutes]);
+
+  useEffect(() => {
+    if (!running || remaining <= 0) return;
+    const id = window.setInterval(() => setRemaining((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(id);
+  }, [remaining, running]);
+
+  useEffect(() => {
+    if (running && remaining === 0) {
+      setRunning(false);
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification(`Session complete: ${habit.name}`, { body: "Ready to log the habit?" });
+      }
+    }
+  }, [habit.name, remaining, running]);
+
+  if (!minutes) return null;
+
+  const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
+  const ss = String(remaining % 60).padStart(2, "0");
+  const completedMinutes = Math.max(1, Math.round((minutes * 60 - remaining) / 60));
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white/[0.025] px-3 py-2 text-xs text-slate-300">
+      <span className="font-semibold text-cyan">{mm}:{ss}</span>
+      <button type="button" className="rounded-md border border-line px-2 py-1 hover:border-cyan/50" onClick={() => setRunning(true)}>{remaining === minutes * 60 ? "Start" : "Resume"}</button>
+      <button type="button" className="rounded-md border border-line px-2 py-1 hover:border-cyan/50" onClick={() => setRunning(false)}>Pause</button>
+      <button type="button" className="rounded-md border border-line px-2 py-1 hover:border-coral/50 hover:text-coral" onClick={() => { setRunning(false); setRemaining(minutes * 60); }}>Stop</button>
+      {remaining === 0 ? (
+        <button type="button" className="rounded-md border border-mint/40 bg-mint/10 px-2 py-1 text-mint" onClick={() => onComplete?.(habit.id, minutes)}>Log Habit</button>
+      ) : remaining < minutes * 60 ? (
+        <button type="button" className="rounded-md border border-cyan/40 bg-cyan/10 px-2 py-1 text-cyan" onClick={() => onComplete?.(habit.id, completedMinutes)}>Log {completedMinutes}m</button>
+      ) : null}
+    </div>
+  );
 }
 
 const statusStyles = {
@@ -175,58 +222,61 @@ export function HabitCard({ habit, log, onComplete, onMiss, onEdit, onArchive, c
           </div>
 
           {!locked ? (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs text-slate-400">
-                Best {habit.bestStreak} days · Streak {visualStreak}d · Next +
-                {getHabitCompletionXp(habit.currentStreak + 1, habit.baseXp, habit.streakMultiplierEnabled)} XP
-                {DEV_MODE && habit.testingStreakOverride !== undefined ? " - Testing override" : ""}
-              </p>
-              {!compact ? (
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={isComplete}
-                    className={clsx(
-                      "dl-button inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-semibold shadow-glow hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-55",
-                      tier >= 4 ? "bg-gradient-to-r from-gold to-orange-300 text-slate-950" : "bg-gradient-to-r from-cyan to-mint text-slate-950"
-                    )}
-                    onClick={() => onComplete?.(habit.id)}
-                  >
-                    <Check className="h-4 w-4" />
-                    {isComplete ? "Done" : "Complete"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isMissed}
-                    className="dl-button grid h-9 w-9 place-items-center rounded-lg border border-line bg-white/[0.03] text-slate-300 hover:border-coral/60 hover:text-coral disabled:cursor-not-allowed disabled:opacity-45"
-                    title="Mark missed"
-                    onClick={() => onMiss?.(habit.id)}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                  {onEdit ? (
+            <>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-slate-400">
+                  Best {habit.bestStreak} days - Streak {visualStreak}d - Next +
+                  {getHabitCompletionXp(habit.currentStreak + 1, habit.baseXp, habit.streakMultiplierEnabled)} XP
+                  {DEV_MODE && habit.testingStreakOverride !== undefined ? " - Testing override" : ""}
+                </p>
+                {!compact ? (
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      className="dl-button grid h-9 w-9 place-items-center rounded-lg border border-line bg-white/[0.03] text-slate-300 hover:border-cyan/60 hover:text-cyan"
-                      title="Edit habit"
-                      onClick={() => onEdit(habit)}
+                      disabled={isComplete}
+                      className={clsx(
+                        "dl-button inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-semibold shadow-glow hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-55",
+                        tier >= 4 ? "bg-gradient-to-r from-gold to-orange-300 text-slate-950" : "bg-gradient-to-r from-cyan to-mint text-slate-950"
+                      )}
+                      onClick={() => onComplete?.(habit.id)}
                     >
-                      <Pencil className="h-4 w-4" />
+                      <Check className="h-4 w-4" />
+                      {isComplete ? "Done" : "Complete"}
                     </button>
-                  ) : null}
-                  {onArchive ? (
                     <button
                       type="button"
-                      className="dl-button grid h-9 w-9 place-items-center rounded-lg border border-line bg-white/[0.03] text-slate-300 hover:border-coral/60 hover:text-coral"
-                      title="Archive habit"
-                      onClick={() => onArchive(habit.id)}
+                      disabled={isMissed}
+                      className="dl-button grid h-9 w-9 place-items-center rounded-lg border border-line bg-white/[0.03] text-slate-300 hover:border-coral/60 hover:text-coral disabled:cursor-not-allowed disabled:opacity-45"
+                      title="Mark missed"
+                      onClick={() => onMiss?.(habit.id)}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <X className="h-4 w-4" />
                     </button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
+                    {onEdit ? (
+                      <button
+                        type="button"
+                        className="dl-button grid h-9 w-9 place-items-center rounded-lg border border-line bg-white/[0.03] text-slate-300 hover:border-cyan/60 hover:text-cyan"
+                        title="Edit habit"
+                        onClick={() => onEdit(habit)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                    {onArchive ? (
+                      <button
+                        type="button"
+                        className="dl-button grid h-9 w-9 place-items-center rounded-lg border border-line bg-white/[0.03] text-slate-300 hover:border-coral/60 hover:text-coral"
+                        title="Archive habit"
+                        onClick={() => onArchive(habit.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              <HabitTimer habit={habit} onComplete={onComplete} />
+            </>
           ) : (
             <div className="mt-4 flex items-center justify-between gap-3">
               <p className="text-xs text-slate-500">Unlocks after the prerequisite is cleared.</p>

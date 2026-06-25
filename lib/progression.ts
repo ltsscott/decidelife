@@ -91,6 +91,25 @@ export function getDailyCompletionPercentage(habits: Habit[], completedHabitIds:
   return Math.round((completedHabitIds.length / unlocked.length) * 100);
 }
 
+export function weekdayForDate(date: string) {
+  return new Date(`${date}T00:00:00`).getDay();
+}
+
+export function isHabitScheduledForDate(habit: Habit, date: string) {
+  const activeDays = habit.activeDays?.length ? habit.activeDays : [0, 1, 2, 3, 4, 5, 6];
+  return activeDays.includes(weekdayForDate(date));
+}
+
+export function getScheduledHabitsForDate(habits: Habit[], date: string) {
+  return habits.filter((habit) => habit.unlocked && !habit.archived && isHabitScheduledForDate(habit, date));
+}
+
+export function getScheduledDailyCompletionPercentage(habits: Habit[], completedHabitIds: string[], date: string) {
+  const scheduled = getScheduledHabitsForDate(habits, date);
+  if (!scheduled.length) return 0;
+  return Math.round((completedHabitIds.length / scheduled.length) * 100);
+}
+
 export function getProtectorUsageForCurrentMonth(usages: StreakProtectorUsage[]) {
   const month = new Date().toISOString().slice(0, 7);
   return usages.find((usage) => usage.month === month) ?? {

@@ -4,6 +4,58 @@
 
 :root {
   color-scheme: dark;
+  --theme-bg-a: rgba(56, 189, 248, 0.16);
+  --theme-bg-b: rgba(139, 92, 246, 0.12);
+  --theme-bg-c: rgba(45, 212, 191, 0.1);
+  --theme-accent: #38bdf8;
+  --theme-accent-soft: rgba(56, 189, 248, 0.16);
+  --theme-accent-border: rgba(56, 189, 248, 0.6);
+  --theme-secondary: #2dd4bf;
+  --theme-frame: #f8c14a;
+}
+
+:root[data-theme="black"] {
+  --theme-bg-a: rgba(148, 163, 184, 0.1);
+  --theme-bg-b: rgba(30, 41, 59, 0.24);
+  --theme-bg-c: rgba(255, 255, 255, 0.05);
+  --theme-accent: #e5e7eb;
+  --theme-accent-soft: rgba(229, 231, 235, 0.12);
+  --theme-accent-border: rgba(229, 231, 235, 0.48);
+  --theme-secondary: #94a3b8;
+  --theme-frame: #cbd5e1;
+}
+
+:root[data-theme="red"] {
+  --theme-bg-a: rgba(251, 113, 133, 0.16);
+  --theme-bg-b: rgba(127, 29, 29, 0.22);
+  --theme-bg-c: rgba(248, 113, 113, 0.1);
+  --theme-accent: #fb7185;
+  --theme-accent-soft: rgba(251, 113, 133, 0.16);
+  --theme-accent-border: rgba(251, 113, 133, 0.6);
+  --theme-secondary: #fca5a5;
+  --theme-frame: #f8c14a;
+}
+
+:root[data-theme="green"] {
+  --theme-bg-a: rgba(34, 197, 94, 0.16);
+  --theme-bg-b: rgba(20, 83, 45, 0.2);
+  --theme-bg-c: rgba(45, 212, 191, 0.12);
+  --theme-accent: #22c55e;
+  --theme-accent-soft: rgba(34, 197, 94, 0.16);
+  --theme-accent-border: rgba(34, 197, 94, 0.6);
+  --theme-secondary: #2dd4bf;
+  --theme-frame: #f8c14a;
+}
+
+:root[data-theme="gold"] {
+  --theme-bg-a: rgba(248, 193, 74, 0.16);
+  --theme-bg-b: rgba(120, 53, 15, 0.2);
+  --theme-bg-c: rgba(251, 146, 60, 0.11);
+  --theme-accent: #f8c14a;
+  --theme-accent-soft: rgba(248, 193, 74, 0.16);
+  --theme-accent-border: rgba(248, 193, 74, 0.62);
+  --theme-secondary: #fb923c;
+  --theme-frame: #fef3c7;
 }
 
 * {
@@ -13,9 +65,9 @@
 body {
   min-height: 100vh;
   background:
-    radial-gradient(circle at 12% 8%, rgba(56, 189, 248, 0.16), transparent 27rem),
-    radial-gradient(circle at 84% 10%, rgba(139, 92, 246, 0.12), transparent 26rem),
-    radial-gradient(circle at 70% 90%, rgba(45, 212, 191, 0.1), transparent 24rem),
+    radial-gradient(circle at 12% 8%, var(--theme-bg-a), transparent 27rem),
+    radial-gradient(circle at 84% 10%, var(--theme-bg-b), transparent 26rem),
+    radial-gradient(circle at 70% 90%, var(--theme-bg-c), transparent 24rem),
     linear-gradient(135deg, #040814 0%, #07111f 48%, #0b1020 100%);
   color: #e5edf7;
   text-rendering: optimizeLegibility;
@@ -29,7 +81,54 @@ select {
 }
 
 ::selection {
-  background: rgba(45, 212, 191, 0.35);
+  background: var(--theme-accent-soft);
+}
+
+.text-cyan {
+  color: var(--theme-accent) !important;
+}
+
+.text-mint {
+  color: var(--theme-secondary) !important;
+}
+
+.bg-cyan {
+  background-color: var(--theme-accent) !important;
+}
+
+.border-cyan\/30,
+.border-cyan\/35,
+.border-cyan\/40,
+.border-cyan\/45,
+.border-cyan\/50,
+.border-cyan\/55,
+.border-cyan\/60,
+.border-cyan\/70,
+.border-cyan\/75,
+.border-cyan\/80 {
+  border-color: var(--theme-accent-border) !important;
+}
+
+.bg-cyan\/10,
+.bg-cyan\/14,
+.bg-cyan\/18,
+.bg-cyan\/20 {
+  background-color: var(--theme-accent-soft) !important;
+}
+
+.from-cyan {
+  --tw-gradient-from: var(--theme-accent) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: color-mix(in srgb, var(--theme-accent) 0%, transparent) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+.to-mint {
+  --tw-gradient-to: var(--theme-secondary) var(--tw-gradient-to-position) !important;
+}
+
+.via-mint {
+  --tw-gradient-to: color-mix(in srgb, var(--theme-secondary) 0%, transparent) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--theme-secondary) var(--tw-gradient-via-position), var(--tw-gradient-to) !important;
 }
 
 @layer components {
@@ -428,5 +527,39 @@ select {
   50% {
     transform: translateY(-6px) scale(1.2);
     opacity: 1;
+  }
+}
+
+.perfect-day-glow {
+  animation: perfect-day-pulse 2.8s ease-in-out infinite;
+}
+
+.confetti-layer {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle, var(--theme-accent) 0 2px, transparent 3px) 12% 24% / 80px 80px,
+    radial-gradient(circle, #f8c14a 0 2px, transparent 3px) 42% 12% / 90px 90px,
+    radial-gradient(circle, #fb7185 0 2px, transparent 3px) 72% 28% / 70px 70px;
+  animation: confetti-fall 2.6s linear infinite;
+  opacity: 0.65;
+}
+
+@keyframes perfect-day-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 0 rgba(248, 193, 74, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 24px rgba(248, 193, 74, 0.28));
+  }
+}
+
+@keyframes confetti-fall {
+  from {
+    background-position-y: 0, 0, 0;
+  }
+  to {
+    background-position-y: 120px, 90px, 70px;
   }
 }

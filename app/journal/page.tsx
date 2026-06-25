@@ -2,12 +2,25 @@
 
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { JournalEntryCard } from "@/components/JournalEntryCard";
 import { useDecideLife } from "@/lib/local-store";
 
 export default function JournalPage() {
   const { journalEntries } = useDecideLife();
+  const [query, setQuery] = useState("");
+  const filteredEntries = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return journalEntries;
+    return journalEntries.filter((entry) =>
+      entry.title.toLowerCase().includes(term) ||
+      entry.body.toLowerCase().includes(term) ||
+      entry.date.includes(term) ||
+      entry.mood.toLowerCase().includes(term) ||
+      entry.tags.some((tag) => tag.toLowerCase().includes(term))
+    );
+  }, [journalEntries, query]);
 
   return (
     <DashboardLayout>
@@ -27,8 +40,18 @@ export default function JournalPage() {
           </Link>
         </header>
 
+        <section className="mb-5 rounded-xl border border-line bg-white/[0.03] p-4">
+          <input
+            className="w-full rounded-lg border border-line bg-ink/70 px-3 py-2 text-white outline-none transition focus:border-cyan/60"
+            placeholder="Search by keyword, date, habit, trading, mission, tag..."
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+          />
+          <p className="mt-2 text-xs text-slate-500">{filteredEntries.length} result{filteredEntries.length === 1 ? "" : "s"}</p>
+        </section>
+
         <section className="grid gap-4">
-          {journalEntries.map((entry) => (
+          {filteredEntries.map((entry) => (
             <JournalEntryCard key={entry.id} entry={entry} />
           ))}
         </section>

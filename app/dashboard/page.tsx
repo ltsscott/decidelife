@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Award, Crown, Flame, Gem, Shield, Sparkles, Star, TrendingUp, Trophy } from "lucide-react";
+import { Award, CalendarDays, Crown, Flame, Gem, Shield, Sparkles, Star, TrendingUp, Trophy } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DevStatTester, type DevStatOverride } from "@/components/DevStatTester";
 import { HabitCard } from "@/components/HabitCard";
@@ -9,7 +9,7 @@ import { MissionCard } from "@/components/MissionCard";
 import { NotificationBanner } from "@/components/NotificationBanner";
 import { StatCard } from "@/components/StatCard";
 import { XPBar } from "@/components/XPBar";
-import { getDailyCompletionPercentage, getLevelTier, getLevelTierLabel, getTitleForLevel } from "@/lib/progression";
+import { getLevelTier, getLevelTierLabel, getScheduledDailyCompletionPercentage, getTitleForLevel, isHabitScheduledForDate } from "@/lib/progression";
 import { DEV_MODE } from "@/lib/dev-mode";
 import { hasSupabaseConfig } from "@/lib/supabase";
 import { useDecideLife } from "@/lib/local-store";
@@ -43,6 +43,9 @@ export default function DashboardPage() {
     habits,
     habitLogs,
     missions,
+    journalEntries,
+    tradingJournalEntries,
+    personalQuotes,
     profile,
     levelProgress,
     todayCompletedHabitIds,
@@ -51,9 +54,12 @@ export default function DashboardPage() {
     missHabit,
     completeMission,
     notification,
-    dismissNotification
+    dismissNotification,
+    markMorningBriefViewed,
+    awardDailyVictory
   } = useDecideLife();
   const [devStatOverride, setDevStatOverride] = useState<DevStatOverride | null>(null);
+  const [reminderMessage, setReminderMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!DEV_MODE) return;
@@ -70,10 +76,84 @@ export default function DashboardPage() {
   const today = new Date().toISOString().slice(0, 10);
   const visibleHabits = habits.filter((habit) => !habit.archived).sort((a, b) => a.order - b.order);
   const visibleMissions = missions.filter((mission) => !mission.archived);
-  const unlockedHabits = visibleHabits.filter((habit) => habit.unlocked);
+  const unlockedHabits = visibleHabits.filter((habit) => habit.unlocked && isHabitScheduledForDate(habit, today));
   const lockedHabits = visibleHabits.filter((habit) => !habit.unlocked);
   const activeMissions = visibleMissions.filter((mission) => !mission.completed).slice(0, 3);
-  const completion = getDailyCompletionPercentage(habits, todayCompletedHabitIds);
+  const completion = getScheduledDailyCompletionPercentage(habits, todayCompletedHabitIds, today);
+  const completedToday = todayCompletedHabitIds.length;
+  const totalToday = unlockedHabits.length;
+  const perfectDay = totalToday > 0 && completedToday === totalToday;
+  const quote = personalQuotes.length ? personalQuotes[Math.abs(today.split("-").join("").split("").reduce((sum, item) => sum + Number(item), 0)) % personalQuotes.length] : null;
+  const focusMission = activeMissions[0];
+  const identity = completion >= 90 && tradingJournalEntries.some((entry) => entry.date === today && entry.followedRules) ? "Disciplined Trader" :
+    completion >= 80 ? "Elite Performer" :
+    journalEntries.some((entry) => entry.date === today) ? "Consistent Learner" :
+    "Building Discipline";
+  const currentChain = (() => {
+    let chain = 0;
+    let cursor = new Date(`${today}T00:00:00`);
+    for (let i = 0; i < 370; i += 1) {
+      const key = cursor.toISOString().slice(0, 10);
+      const scheduled = habits.filter((habit) => habit.unlocked && !habit.archived && isHabitScheduledForDate(habit, key));
+      if (!scheduled.length) {
+        cursor.setDate(cursor.getDate() - 1);
+        continue;
+      }
+      const done = scheduled.every((habit) => habitLogs.some((log) => log.habitId === habit.id && log.date === key && log.status === "completed"));
+      if (!done) break;
+      chain += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return chain;
+  })();
+  const tomorrow = (() => {
+    const next = new Date(`${today}T00:00:00`);
+    next.setDate(next.getDate() + 1);
+    return next.toISOString().slice(0, 10);
+  })();
+  const tomorrowHabits = visibleHabits.filter((habit) => habit.unlocked && isHabitScheduledForDate(habit, tomorrow));
+  const yearDays = Array.from({ length: 365 }, (_, index) => {
+    const date = new Date(`${today.slice(0, 4)}-01-01T00:00:00`);
+    date.setDate(date.getDate() + index);
+    const key = date.toISOString().slice(0, 10);
+    const scheduled = habits.filter((habit) => habit.unlocked && !habit.archived && isHabitScheduledForDate(habit, key));
+    const done = scheduled.filter((habit) => habitLogs.some((log) => log.habitId === habit.id && log.date === key && log.status === "completed")).length;
+    const ratio = scheduled.length ? done / scheduled.length : 0;
+    return { key, ratio };
+  });
+
+  useEffect(() => {
+    if (perfectDay) awardDailyVictory(today);
+  }, [awardDailyVictory, perfectDay, today]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if ("Notification" in window && Notification.permission === "default") {
+      void Notification.requestPermission();
+    }
+    const fired = new Set<string>();
+    const checkReminders = () => {
+      const now = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      unlockedHabits.forEach((habit) => {
+        if (habit.reminderTime === hhmm && !fired.has(`${today}-${habit.id}-${hhmm}`)) {
+          fired.add(`${today}-${habit.id}-${hhmm}`);
+          const message = `Time for ${habit.name}. Maintain your streak.`;
+          if ("Notification" in window && Notification.permission === "granted") new Notification(message);
+          else setReminderMessage(message);
+        }
+      });
+      if (profile.reflectionReminderTime === hhmm && !fired.has(`${today}-reflection-${hhmm}`)) {
+        fired.add(`${today}-reflection-${hhmm}`);
+        const message = "Your day isn't complete yet.";
+        if ("Notification" in window && Notification.permission === "granted") new Notification(message);
+        else setReminderMessage(message);
+      }
+    };
+    checkReminders();
+    const interval = window.setInterval(checkReminders, 60000);
+    return () => window.clearInterval(interval);
+  }, [profile.reflectionReminderTime, today, unlockedHabits]);
   const previewEnabled = DEV_MODE && (devStatOverride?.enabled ?? false);
   const displayLevelProgress = useMemo(
     () => previewEnabled && devStatOverride
@@ -127,6 +207,92 @@ export default function DashboardPage() {
         ) : null}
 
         <NotificationBanner message={notification} onDismiss={dismissNotification} />
+        <NotificationBanner message={reminderMessage} onDismiss={() => setReminderMessage(null)} />
+
+        {profile.lastMorningBriefDate !== today ? (
+          <section className="mb-6 rounded-2xl border border-cyan/35 bg-cyan/[0.06] p-5 shadow-glow backdrop-blur-xl">
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+              <div>
+                <p className="text-sm font-semibold uppercase text-cyan">Morning Brief</p>
+                <h2 className="mt-2 text-2xl font-semibold text-white">Good Morning, {profile.displayName}.</h2>
+                {quote ? <p className="mt-3 text-lg text-slate-200">"{quote.text}"</p> : null}
+                <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2 lg:grid-cols-5">
+                  <span>Today&apos;s Habits: <strong className="text-white">{totalToday}</strong></span>
+                  <span>Current Streak: <strong className="text-white">{Math.max(...habits.map((habit) => habit.currentStreak), 0)} Days</strong></span>
+                  <span>Focus Mission: <strong className="text-white">{focusMission?.title ?? "None"}</strong></span>
+                  <span>Trading Today: <strong className="text-white">London Session</strong></span>
+                  <span>Identity: <strong className="text-white">{identity}</strong></span>
+                </div>
+              </div>
+              <button className="dl-button rounded-lg border border-cyan/40 bg-cyan/10 px-4 py-2 text-sm font-semibold text-cyan" onClick={() => markMorningBriefViewed(today)}>
+                Dismiss
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        <section className={`mb-6 grid gap-4 lg:grid-cols-[1fr_0.7fr] ${perfectDay ? "perfect-day-glow" : ""}`}>
+          <article className="dl-card relative overflow-hidden p-5">
+            {perfectDay ? <div className="confetti-layer" /> : null}
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+              <div>
+                <p className="text-sm font-semibold uppercase text-cyan">Today&apos;s Progress</p>
+                <h2 className="mt-1 text-3xl font-semibold text-white">{perfectDay ? "Daily Victory" : `${displayCompletion}%`}</h2>
+                <p className="mt-1 text-sm text-slate-400">{completedToday} / {totalToday} Habits Completed</p>
+              </div>
+              {perfectDay ? <span className="rounded-full border border-gold/50 bg-gold/10 px-4 py-2 text-sm font-semibold text-gold">PERFECT DAY +{profile.dailyBonusXp} XP</span> : null}
+            </div>
+            <div className="mt-4 h-4 overflow-hidden rounded-full border border-line bg-ink/70">
+              <div className="h-full rounded-full bg-gradient-to-r from-cyan via-mint to-gold transition-[width] duration-700" style={{ width: `${displayCompletion}%` }} />
+            </div>
+          </article>
+
+          <article className="dl-card p-5">
+            <p className="text-sm font-semibold uppercase text-cyan">Don&apos;t Break The Chain</p>
+            <h2 className="mt-2 text-3xl font-semibold text-white">{currentChain} Consecutive Days</h2>
+            <p className="mt-2 text-sm text-slate-400">Milestones: 7, 30, 60, 100, 180, 365</p>
+            <p className="mt-3 rounded-lg border border-line bg-white/[0.03] px-3 py-2 text-sm text-slate-300">Identity: <span className="font-semibold text-cyan">{identity}</span></p>
+          </article>
+        </section>
+
+        <section className="mb-6 grid gap-4 xl:grid-cols-3">
+          <article className="dl-card p-5">
+            <p className="text-sm font-semibold uppercase text-cyan">Weekly Review</p>
+            <div className="mt-3 grid gap-2 text-sm text-slate-300">
+              <p>Habits Completed: <strong className="text-white">{habitLogs.filter((log) => log.status === "completed").slice(-50).length}</strong></p>
+              <p>Completion: <strong className="text-white">{displayCompletion}% today</strong></p>
+              <p>Level Progress: <strong className="text-white">{displayLevelProgress.percentage}%</strong></p>
+              <p>Best Habit: <strong className="text-white">{[...habits].sort((a, b) => b.currentStreak - a.currentStreak)[0]?.name ?? "None"}</strong></p>
+              <p>Trading Summary: <strong className="text-white">{tradingJournalEntries.filter((entry) => entry.date >= today.slice(0, 8) + "01").length} logs this month</strong></p>
+              <p>Journal Entries Written: <strong className="text-white">{journalEntries.length}</strong></p>
+            </div>
+          </article>
+          <article className="dl-card p-5">
+            <p className="text-sm font-semibold uppercase text-cyan">Tomorrow</p>
+            <div className="mt-3 grid gap-2 text-sm text-slate-300">
+              <p>Tomorrow&apos;s Habits: <strong className="text-white">{tomorrowHabits.length}</strong></p>
+              <p>Trading Scheduled: <strong className="text-white">Check session plan</strong></p>
+              <p>Mission Focus: <strong className="text-white">{focusMission?.title ?? "None"}</strong></p>
+              <p>Reminders: <strong className="text-white">{tomorrowHabits.filter((habit) => habit.reminderTime).length}</strong></p>
+            </div>
+          </article>
+          <article className="dl-card p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-cyan" />
+              <p className="text-sm font-semibold uppercase text-cyan">Consistency Heatmap</p>
+            </div>
+            <div className="grid grid-cols-[repeat(53,minmax(0,1fr))] gap-1">
+              {yearDays.map((day) => (
+                <a
+                  key={day.key}
+                  href={`/journal/${day.key}`}
+                  title={`${day.key}: ${Math.round(day.ratio * 100)}%`}
+                  className={`h-2.5 rounded-sm ${day.ratio >= 1 ? "bg-cyan" : day.ratio >= 0.66 ? "bg-cyan/60" : day.ratio > 0 ? "bg-cyan/25" : "bg-white/[0.05]"}`}
+                />
+              ))}
+            </div>
+          </article>
+        </section>
 
         <section
           className={[
@@ -228,7 +394,7 @@ export default function DashboardPage() {
                   key={habit.id}
                   habit={habit}
                   log={habitLogs.find((log) => log.habitId === habit.id && log.date === today)}
-                  onComplete={completeHabit}
+                  onComplete={(habitId, durationMinutes) => completeHabit(habitId, today, durationMinutes)}
                   onMiss={missHabit}
                 />
               ))}
