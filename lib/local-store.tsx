@@ -25,6 +25,7 @@ interface DecideLifeState {
 
 interface DecideLifeContextValue extends DecideLifeState {
   completeHabit: (habitId: string, date?: string, durationMinutes?: number) => void;
+  uncompleteHabit: (habitId: string, date?: string) => void;
   missHabit: (habitId: string, date?: string) => void;
   saveHabit: (habit: Habit) => void;
   archiveHabit: (habitId: string) => void;
@@ -54,6 +55,8 @@ interface DecideLifeContextValue extends DecideLifeState {
   todayCompletedHabitIds: string[];
   protectorsRemaining: number;
   notification: string | null;
+  authReady: boolean;
+  isAuthenticated: boolean;
 }
 
 const STORAGE_KEY = "decidelife-state-v1";
@@ -374,6 +377,7 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<DecideLifeState>(initialState);
   const [notification, setNotification] = useState<string | null>(null);
   const [supabaseUser, setSupabaseUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -387,36 +391,49 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
 
     const loadOnlineState = async (user: User, fallback: DecideLifeState) => {
       try {
+        console.info("[DecideLife sync] Loading Supabase state", { userId: user.id, fallbackLevel: fallback.profile.currentLevel, fallbackXp: fallback.profile.totalXp });
         const remote = await loadSupabaseState(user, attachSupabaseUser(fallback, user));
         if (cancelled) return;
         const reviewed = closePendingPreviousDays(normalizeState(remote));
         const next = attachSupabaseUser(reviewed, user);
+        console.info("[DecideLife sync] Supabase state loaded", { userId: user.id, level: next.profile.currentLevel, xp: next.profile.totalXp, habits: next.habits.length });
         setState(next);
         saveState(next);
         await saveSupabaseState(user.id, next);
       } catch (error) {
         console.warn("DecideLife Supabase sync failed. Staying in local fallback mode.", error);
+      } finally {
+        if (!cancelled) setAuthReady(true);
       }
     };
 
     const localState = loadLocalState();
 
-    if (!hasSupabaseConfig || !supabase) return;
+    if (!hasSupabaseConfig || !supabase) {
+      setAuthReady(true);
+      return;
+    }
 
     supabase.auth.getSession().then(({ data }) => {
       const user = data.session?.user ?? null;
       if (cancelled) return;
       setSupabaseUser(user);
+      console.info("[DecideLife auth] Session checked", { authenticated: Boolean(user), userId: user?.id });
       if (user) void loadOnlineState(user, localState);
+      else setAuthReady(true);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       const user = session?.user ?? null;
       setSupabaseUser(user);
+      console.info("[DecideLife auth] Auth state changed", { authenticated: Boolean(user), event: _event, userId: user?.id });
       if (user) {
+        setAuthReady(false);
         const reviewed = closePendingPreviousDays(getStoredLocalState());
         saveState(reviewed);
         void loadOnlineState(user, reviewed);
+      } else {
+        setAuthReady(true);
       }
     });
 
@@ -436,6 +453,7 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
       saveState(next);
       if (supabaseUser) {
         const onlineState = attachSupabaseUser(next, supabaseUser);
+        console.info("[DecideLife sync] Saving Supabase state", { userId: supabaseUser.id, level: onlineState.profile.currentLevel, xp: onlineState.profile.totalXp });
         void saveSupabaseState(supabaseUser.id, onlineState).catch((error) => {
           console.warn("DecideLife Supabase save failed. Local fallback was saved.", error);
         });
@@ -467,6 +485,15 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
       }
 
       return next;
+    });
+  };
+
+  const uncompleteHabit = (habitId: string, date = today()) => {
+    updateState((current) => {
+      const existingLog = current.habitLogs.find((log) => log.habitId === habitId && log.date === date);
+      if (!existingLog || existingLog.status !== "completed") return current;
+      const nextLogs = current.habitLogs.filter((log) => !(log.habitId === habitId && log.date === date));
+      return finalizeHabitState(current, nextLogs, current.protectors);
     });
   };
 
@@ -743,7 +770,10 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
       todayCompletedHabitIds,
       protectorsRemaining: Math.max(0, currentUsage.totalAvailable - currentUsage.used),
       notification,
+      authReady,
+      isAuthenticated: Boolean(supabaseUser),
       completeHabit,
+      uncompleteHabit,
       missHabit,
       saveHabit,
       archiveHabit,
@@ -770,7 +800,7 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
       setHabitTestingStreakOverride,
       clearHabitTestingStreakOverride
     };
-  }, [state, notification, supabaseUser]);
+  }, [state, notification, supabaseUser, authReady]);
 
   return <DecideLifeContext.Provider value={value}>{children}</DecideLifeContext.Provider>;
 }

@@ -80,6 +80,38 @@ select {
   font: inherit;
 }
 
+.widget-drag-region {
+  -webkit-app-region: drag;
+}
+
+.widget-no-drag,
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-app-region: no-drag;
+}
+
+.widget-hide-scrollbars,
+.widget-hide-scrollbars body {
+  scrollbar-width: none;
+}
+
+.widget-hide-scrollbars::-webkit-scrollbar,
+.widget-hide-scrollbars body::-webkit-scrollbar {
+  display: none;
+}
+
+.minimal-widget {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow:
+    0 0 32px rgba(56, 189, 248, 0.18),
+    0 0 48px rgba(139, 92, 246, 0.12) !important;
+  text-shadow: 0 0 14px rgba(56, 189, 248, 0.28);
+}
+
 ::selection {
   background: var(--theme-accent-soft);
 }
