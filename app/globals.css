@@ -73,6 +73,12 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+.widget-transparent-page,
+.widget-transparent-page body {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
 button,
 input,
 textarea,
@@ -110,6 +116,42 @@ select {
     0 0 32px rgba(56, 189, 248, 0.18),
     0 0 48px rgba(139, 92, 246, 0.12) !important;
   text-shadow: 0 0 14px rgba(56, 189, 248, 0.28);
+}
+
+.floating-widget {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
+}
+
+.widget-floating-text {
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.2),
+    0 0 18px rgba(56, 189, 248, 0.16);
+}
+
+.widget-floating-row {
+  padding-block: 0.25rem;
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.2),
+    0 0 14px rgba(56, 189, 248, 0.12);
+}
+
+.widget-element-glass {
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 0 20px rgba(80, 120, 255, 0.15);
+  backdrop-filter: blur(6px);
+}
+
+.widget-progress-track {
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 0 20px rgba(80, 120, 255, 0.15),
+    inset 0 0 12px rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(4px);
 }
 
 ::selection {

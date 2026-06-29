@@ -11,6 +11,7 @@ type WidgetSize = "small" | "medium" | "large";
 interface WidgetSettings {
   transparency: number;
   keepOnTop: boolean;
+  floatingMode: boolean;
   minimalMode: boolean;
   widgetSize: WidgetSize;
   rememberPosition: boolean;
@@ -29,8 +30,9 @@ declare global {
 }
 
 const defaultSettings: WidgetSettings = {
-  transparency: 5,
+  transparency: 0,
   keepOnTop: false,
+  floatingMode: true,
   minimalMode: false,
   widgetSize: "medium",
   rememberPosition: true,
@@ -75,6 +77,7 @@ export default function WidgetPage() {
   const today = todayKey();
 
   useEffect(() => {
+    document.documentElement.classList.add("widget-transparent-page");
     const params = new URLSearchParams(window.location.search);
     const initial = {
       ...loadBrowserSettings(),
@@ -88,6 +91,10 @@ export default function WidgetPage() {
     } else {
       setSettings(initial);
     }
+
+    return () => {
+      document.documentElement.classList.remove("widget-transparent-page");
+    };
   }, []);
 
   useEffect(() => {
@@ -137,34 +144,37 @@ export default function WidgetPage() {
   const activeMission = missions.find((mission) => !mission.archived && !mission.locked && !mission.completed);
   const currentStreak = Math.max(0, ...habits.filter((habit) => !habit.archived).map((habit) => habit.currentStreak));
   const alpha = Math.max(0, Math.min(1, settings.transparency / 100));
-  const panelStyle = settings.minimalMode
+  const isFloating = settings.floatingMode || settings.minimalMode;
+  const panelStyle = isFloating
     ? { width: sizeWidths[settings.widgetSize] }
     : {
         width: sizeWidths[settings.widgetSize],
-        background: `rgba(255,255,255,${0.02 + alpha * 0.16})`,
+        background: `rgba(255,255,255,${alpha * 0.12})`,
         backdropFilter: "blur(12px)"
       };
+  const elementGlass = `rgba(255,255,255,${alpha * 0.05})`;
 
   if (!authReady && hasSupabaseConfig) {
     return (
       <main className="grid min-h-screen place-items-center bg-transparent p-3 text-white">
-        <section className="rounded-[20px] bg-white/[0.05] p-5 text-sm text-slate-300 backdrop-blur-xl">Syncing DecideLife account...</section>
+        <section className="widget-floating-text p-5 text-sm text-slate-300">Syncing DecideLife account...</section>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-transparent p-3 text-white">
+    <main className="widget-page min-h-screen overflow-hidden bg-transparent p-3 text-white">
       <section
         ref={widgetRef}
         style={panelStyle}
         className={[
-          "relative mx-auto overflow-hidden rounded-[20px] p-5 text-white",
-          settings.minimalMode ? "minimal-widget" : "shadow-[0_0_46px_rgba(56,189,248,0.18)]",
-          settings.minimalMode ? "" : "border border-white/[0.08]"
+          "relative mx-auto overflow-visible rounded-[20px] p-5 text-white",
+          isFloating ? "floating-widget" : "shadow-[0_0_46px_rgba(56,189,248,0.18)]",
+          settings.minimalMode ? "minimal-widget" : "",
+          isFloating ? "" : "border border-white/[0.08]"
         ].join(" ")}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_8%,rgba(56,189,248,0.2),transparent_24%),radial-gradient(circle_at_90%_12%,rgba(139,92,246,0.18),transparent_24%)]" />
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_10%_5%,rgba(56,189,248,0.1),transparent_28%),radial-gradient(circle_at_92%_18%,rgba(139,92,246,0.08),transparent_26%)]" />
         <div className="relative">
           <div className="widget-drag-region mb-4 flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -174,7 +184,8 @@ export default function WidgetPage() {
             </div>
             <button
               type="button"
-              className="widget-no-drag grid h-9 w-9 place-items-center rounded-xl bg-white/[0.06] text-slate-300 transition hover:text-cyan"
+              className="widget-no-drag widget-element-glass grid h-9 w-9 place-items-center rounded-xl text-slate-300 transition hover:text-cyan"
+              style={{ background: elementGlass }}
               title="Desktop widget settings"
               onClick={() => setSettingsOpen((value) => !value)}
             >
@@ -183,13 +194,14 @@ export default function WidgetPage() {
           </div>
 
           {settingsOpen ? (
-            <div className="widget-no-drag mb-4 grid gap-3 rounded-2xl bg-black/35 p-3 text-xs text-slate-300 backdrop-blur-xl">
+            <div className="widget-no-drag widget-element-glass mb-4 grid gap-3 rounded-2xl p-3 text-xs text-slate-300">
               <label className="grid gap-1">
-                Transparency {settings.transparency}%
+                Background Strength {settings.transparency}%
                 <input type="range" min={0} max={100} value={settings.transparency} onChange={(event) => void updateSettings({ transparency: Number(event.currentTarget.value) })} />
               </label>
               {[
                 ["keepOnTop", "Keep on Top"],
+                ["floatingMode", "Floating Widget Mode"],
                 ["minimalMode", "Minimal Mode"],
                 ["rememberPosition", "Remember Window Position"],
                 ["hideScrollbars", "Hide Scrollbars"],
@@ -215,7 +227,7 @@ export default function WidgetPage() {
             </div>
           ) : null}
 
-          <div className={settings.minimalMode ? "mb-4" : "mb-4 rounded-2xl bg-white/[0.05] p-3"}>
+          <div className={isFloating ? "widget-floating-text mb-4" : "mb-4 rounded-2xl bg-white/[0.05] p-3"}>
             <div className="flex items-end justify-between gap-3">
               <div>
                 <p className="text-xs uppercase text-slate-400">XP</p>
@@ -223,7 +235,7 @@ export default function WidgetPage() {
               </div>
               <p className="text-xs text-cyan">{levelProgress.percentage}%</p>
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+            <div className="widget-progress-track mt-3 h-2 overflow-hidden rounded-full">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-cyan via-violet to-cyan shadow-[0_0_18px_rgba(56,189,248,0.55)] transition-[width] duration-700"
                 style={{ width: `${levelProgress.percentage}%` }}
@@ -237,7 +249,7 @@ export default function WidgetPage() {
               <span className="text-[11px] text-cyan">{todayCompletedHabitIds.length}/{todaysHabits.length}</span>
             </div>
             {!settings.minimalMode ? (
-              <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div className="widget-progress-track mb-3 h-1.5 overflow-hidden rounded-full">
                 <div className="h-full rounded-full bg-gradient-to-r from-cyan to-violet transition-[width] duration-700" style={{ width: `${completion}%` }} />
               </div>
             ) : null}
@@ -250,7 +262,7 @@ export default function WidgetPage() {
                     key={habit.id}
                     className={[
                       "group flex items-center gap-3 text-sm text-slate-100 transition",
-                      settings.minimalMode ? "" : "rounded-xl bg-white/[0.045] px-3 py-2 hover:bg-cyan/[0.06]"
+                      isFloating ? "widget-floating-row" : "rounded-xl bg-white/[0.045] px-3 py-2 hover:bg-cyan/[0.06]"
                     ].join(" ")}
                   >
                     <button
@@ -273,14 +285,14 @@ export default function WidgetPage() {
           </div>
 
           <div className={settings.minimalMode ? "mt-5 grid gap-3" : "mt-4 grid gap-3"}>
-            <div className={settings.minimalMode ? "" : "rounded-2xl bg-white/[0.045] p-3"}>
+            <div className={isFloating ? "widget-floating-text" : "rounded-2xl bg-white/[0.045] p-3"}>
               <div className="mb-1 flex items-center gap-2 text-xs uppercase text-slate-400">
                 <Target className="h-3.5 w-3.5 text-violet" />
                 Mission
               </div>
               <p className="text-sm font-medium text-white">{activeMission?.title ?? "No active mission"}</p>
             </div>
-            <div className={settings.minimalMode ? "" : "rounded-2xl bg-white/[0.045] p-3"}>
+            <div className={isFloating ? "widget-floating-text" : "rounded-2xl bg-white/[0.045] p-3"}>
               <div className="mb-1 flex items-center gap-2 text-xs uppercase text-slate-400">
                 <Flame className="h-3.5 w-3.5 text-cyan" />
                 Streak

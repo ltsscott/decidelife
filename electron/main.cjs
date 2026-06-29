@@ -7,8 +7,9 @@ const MIN_WIDTH = 380;
 const MIN_HEIGHT = 450;
 
 const defaultSettings = {
-  transparency: 5,
+  transparency: 0,
   keepOnTop: false,
+  floatingMode: true,
   minimalMode: false,
   widgetSize: "medium",
   rememberPosition: true,
@@ -119,6 +120,7 @@ ipcMain.handle("widget:get-settings", () => {
   return {
     transparency: settings.transparency,
     keepOnTop: settings.keepOnTop,
+    floatingMode: settings.floatingMode,
     minimalMode: settings.minimalMode,
     widgetSize: settings.widgetSize,
     rememberPosition: settings.rememberPosition,
@@ -139,6 +141,7 @@ ipcMain.handle("widget:update-settings", (_event, partial) => {
   return {
     transparency: settings.transparency,
     keepOnTop: settings.keepOnTop,
+    floatingMode: settings.floatingMode,
     minimalMode: settings.minimalMode,
     widgetSize: settings.widgetSize,
     rememberPosition: settings.rememberPosition,
