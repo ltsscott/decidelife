@@ -24,9 +24,9 @@ interface DecideLifeState {
 }
 
 interface DecideLifeContextValue extends DecideLifeState {
-  completeHabit: (habitId: string, date?: string, durationMinutes?: number) => void;
-  uncompleteHabit: (habitId: string, date?: string) => void;
-  missHabit: (habitId: string, date?: string) => void;
+  completeHabit: (habitId: string, date?: string, durationMinutes?: number, source?: string) => void;
+  uncompleteHabit: (habitId: string, date?: string, source?: string) => void;
+  missHabit: (habitId: string, date?: string, source?: string) => void;
   saveHabit: (habit: Habit) => void;
   archiveHabit: (habitId: string) => void;
   completeMission: (missionId: string) => void;
@@ -337,6 +337,17 @@ function finalizeHabitState(state: DecideLifeState, habitLogs: HabitLog[], prote
   };
 }
 
+function logHabitXpChange(params: {
+  action: "complete" | "uncomplete" | "miss";
+  source: string;
+  habitId: string;
+  xpBefore: number;
+  xpAfter: number;
+  xpRewardApplied: number;
+}) {
+  console.info("[DecideLife XP]", params);
+}
+
 function closePendingPreviousDays(state: DecideLifeState) {
   const currentDate = today();
   if (compareDates(state.lastHabitReviewDate, currentDate) >= 0) return state;
@@ -396,7 +407,19 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         const reviewed = closePendingPreviousDays(normalizeState(remote));
         const next = attachSupabaseUser(reviewed, user);
-        console.info("[DecideLife sync] Supabase state loaded", { userId: user.id, level: next.profile.currentLevel, xp: next.profile.totalXp, habits: next.habits.length });
+        console.info("[DecideLife sync] Supabase state loaded", {
+          userId: user.id,
+          level: next.profile.currentLevel,
+          xp: next.profile.totalXp,
+          habits: next.habits.length,
+          unlockedHabits: next.habits.filter((habit) => habit.unlocked && !habit.archived).map((habit) => ({
+            id: habit.id,
+            name: habit.name,
+            order: habit.order,
+            baseXp: habit.baseXp,
+            activeDays: habit.activeDays
+          }))
+        });
         setState(next);
         saveState(next);
         await saveSupabaseState(user.id, next);
@@ -444,6 +467,63 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!supabaseUser || !supabase) return;
+    const supabaseClient = supabase;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let cancelled = false;
+
+    const reloadOnlineState = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        const fallback = attachSupabaseUser(getStoredLocalState(), supabaseUser);
+        console.info("[DecideLife sync] Remote change detected. Refreshing online state.", { userId: supabaseUser.id });
+        void loadSupabaseState(supabaseUser, fallback).then((remote) => {
+          if (cancelled) return;
+          const reviewed = closePendingPreviousDays(normalizeState(remote));
+          const next = attachSupabaseUser(reviewed, supabaseUser);
+          console.info("[DecideLife sync] Remote refresh applied", {
+            userId: supabaseUser.id,
+            level: next.profile.currentLevel,
+            xp: next.profile.totalXp,
+            habits: next.habits.length,
+            unlockedHabits: next.habits.filter((habit) => habit.unlocked && !habit.archived).map((habit) => ({
+              id: habit.id,
+              name: habit.name,
+              order: habit.order,
+              baseXp: habit.baseXp,
+              activeDays: habit.activeDays
+            }))
+          });
+          setState(next);
+          saveState(next);
+        }).catch((error) => {
+          console.warn("DecideLife Supabase refresh failed.", error);
+        });
+      }, 700);
+    };
+
+    const channel = supabaseClient.channel(`decidelife-sync-${supabaseUser.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "habits", filter: `user_id=eq.${supabaseUser.id}` }, reloadOnlineState)
+      .on("postgres_changes", { event: "*", schema: "public", table: "habit_logs", filter: `user_id=eq.${supabaseUser.id}` }, reloadOnlineState)
+      .on("postgres_changes", { event: "*", schema: "public", table: "missions", filter: `user_id=eq.${supabaseUser.id}` }, reloadOnlineState)
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_progress", filter: `user_id=eq.${supabaseUser.id}` }, reloadOnlineState)
+      .on("postgres_changes", { event: "*", schema: "public", table: "streak_protectors", filter: `user_id=eq.${supabaseUser.id}` }, reloadOnlineState)
+      .subscribe((status) => {
+        console.info("[DecideLife sync] Realtime subscription status", { userId: supabaseUser.id, status });
+      });
+
+    intervalId = setInterval(reloadOnlineState, 15000);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
+      void supabaseClient.removeChannel(channel);
+    };
+  }, [supabaseUser]);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = state.profile.theme ?? "blue";
   }, [state.profile.theme]);
 
@@ -462,8 +542,9 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const completeHabit = (habitId: string, date = today(), durationMinutes?: number) => {
+  const completeHabit = (habitId: string, date = today(), durationMinutes?: number, source = "dashboard") => {
     updateState((current) => {
+      const xpBefore = current.profile.totalXp;
       const existingLog = current.habitLogs.find((log) => log.habitId === habitId && log.date === date);
       if (existingLog?.status === "completed") return current;
       const habit = current.habits.find((item) => item.id === habitId);
@@ -484,21 +565,41 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
         if (unlockResult.unlockedHabitName) setNotification(`Habit Unlocked: ${unlockResult.unlockedHabitName}`);
       }
 
+      const appliedLog = next.habitLogs.find((log) => log.habitId === habitId && log.date === date);
+      logHabitXpChange({
+        action: "complete",
+        source,
+        habitId,
+        xpBefore,
+        xpAfter: next.profile.totalXp,
+        xpRewardApplied: appliedLog?.xpDelta ?? next.profile.totalXp - xpBefore
+      });
       return next;
     });
   };
 
-  const uncompleteHabit = (habitId: string, date = today()) => {
+  const uncompleteHabit = (habitId: string, date = today(), source = "dashboard") => {
     updateState((current) => {
+      const xpBefore = current.profile.totalXp;
       const existingLog = current.habitLogs.find((log) => log.habitId === habitId && log.date === date);
       if (!existingLog || existingLog.status !== "completed") return current;
       const nextLogs = current.habitLogs.filter((log) => !(log.habitId === habitId && log.date === date));
-      return finalizeHabitState(current, nextLogs, current.protectors);
+      const next = finalizeHabitState(current, nextLogs, current.protectors);
+      logHabitXpChange({
+        action: "uncomplete",
+        source,
+        habitId,
+        xpBefore,
+        xpAfter: next.profile.totalXp,
+        xpRewardApplied: next.profile.totalXp - xpBefore
+      });
+      return next;
     });
   };
 
-  const missHabit = (habitId: string, date = today()) => {
+  const missHabit = (habitId: string, date = today(), source = "dashboard") => {
     updateState((current) => {
+      const xpBefore = current.profile.totalXp;
       const existingLog = current.habitLogs.find((log) => log.habitId === habitId && log.date === date);
       if (existingLog?.status === "missed") return current;
       const habit = current.habits.find((item) => item.id === habitId);
@@ -506,11 +607,20 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
 
       const logs = current.habitLogs.filter((log) => !(log.habitId === habitId && log.date === date));
       const protectors = existingLog?.usedProtector ? changeProtectorUsage(current.protectors, date, -1) : current.protectors;
-      return finalizeHabitState(
+      const next = finalizeHabitState(
         current,
         [...logs, { id: existingLog?.id ?? `log-${habitId}-${date}`, habitId, date, status: "missed", xpDelta: 0, usedProtector: false }],
         protectors
       );
+      logHabitXpChange({
+        action: "miss",
+        source,
+        habitId,
+        xpBefore,
+        xpAfter: next.profile.totalXp,
+        xpRewardApplied: next.profile.totalXp - xpBefore
+      });
+      return next;
     });
   };
 

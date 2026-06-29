@@ -51,6 +51,7 @@ export default function DashboardPage() {
     todayCompletedHabitIds,
     protectorsRemaining,
     completeHabit,
+    uncompleteHabit,
     missHabit,
     completeMission,
     notification,
@@ -394,8 +395,9 @@ export default function DashboardPage() {
                   key={habit.id}
                   habit={habit}
                   log={habitLogs.find((log) => log.habitId === habit.id && log.date === today)}
-                  onComplete={(habitId, durationMinutes) => completeHabit(habitId, today, durationMinutes)}
-                  onMiss={missHabit}
+                  onComplete={(habitId, durationMinutes) => completeHabit(habitId, today, durationMinutes, "dashboard")}
+                  onUncomplete={(habitId) => uncompleteHabit(habitId, today, "dashboard")}
+                  onMiss={(habitId) => missHabit(habitId, today, "dashboard")}
                 />
               ))}
             </div>

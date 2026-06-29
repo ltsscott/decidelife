@@ -11,6 +11,7 @@ interface HabitCardProps {
   habit: Habit;
   log?: HabitLog;
   onComplete?: (habitId: string, durationMinutes?: number) => void;
+  onUncomplete?: (habitId: string) => void;
   onMiss?: (habitId: string) => void;
   onEdit?: (habit: Habit) => void;
   onArchive?: (habitId: string) => void;
@@ -160,7 +161,7 @@ function FramePieces({ tier }: { tier: number }) {
   );
 }
 
-export function HabitCard({ habit, log, onComplete, onMiss, onEdit, onArchive, compact = false }: HabitCardProps) {
+export function HabitCard({ habit, log, onComplete, onUncomplete, onMiss, onEdit, onArchive, compact = false }: HabitCardProps) {
   const visualStreak = DEV_MODE ? habit.testingStreakOverride ?? habit.currentStreak : habit.currentStreak;
   const tier = getStreakTier(visualStreak);
   const tierLabel = getStreakTierLabel(visualStreak);
@@ -233,12 +234,15 @@ export function HabitCard({ habit, log, onComplete, onMiss, onEdit, onArchive, c
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      disabled={isComplete}
                       className={clsx(
-                        "dl-button inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-semibold shadow-glow hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-55",
+                        "dl-button inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-semibold shadow-glow hover:brightness-110",
+                        isComplete && !onUncomplete && "cursor-not-allowed opacity-55",
                         tier >= 4 ? "bg-gradient-to-r from-gold to-orange-300 text-slate-950" : "bg-gradient-to-r from-cyan to-mint text-slate-950"
                       )}
-                      onClick={() => onComplete?.(habit.id)}
+                      onClick={() => {
+                        if (isComplete) onUncomplete?.(habit.id);
+                        else onComplete?.(habit.id);
+                      }}
                     >
                       <Check className="h-4 w-4" />
                       {isComplete ? "Done" : "Complete"}

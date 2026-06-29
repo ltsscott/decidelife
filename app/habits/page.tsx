@@ -14,6 +14,7 @@ export default function HabitsPage() {
     habits,
     habitLogs,
     completeHabit,
+    uncompleteHabit,
     missHabit,
     saveHabit,
     archiveHabit,
@@ -67,8 +68,9 @@ export default function HabitsPage() {
               key={habit.id}
               habit={habit}
               log={habitLogs.find((log) => log.habitId === habit.id && log.date === logDate)}
-              onComplete={(habitId, durationMinutes) => completeHabit(habitId, logDate, durationMinutes)}
-              onMiss={(habitId) => missHabit(habitId, logDate)}
+              onComplete={(habitId, durationMinutes) => completeHabit(habitId, logDate, durationMinutes, "habits")}
+              onUncomplete={(habitId) => uncompleteHabit(habitId, logDate, "habits")}
+              onMiss={(habitId) => missHabit(habitId, logDate, "habits")}
               onEdit={(item) => {
                 setEditingHabit(item);
                 setFormOpen(true);

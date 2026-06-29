@@ -1,4 +1,5 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require("electron");
+const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
@@ -11,6 +12,7 @@ const defaultSettings = {
   keepOnTop: false,
   floatingMode: true,
   minimalMode: false,
+  pinToDesktop: false,
   widgetSize: "medium",
   rememberPosition: true,
   hideScrollbars: true,
@@ -50,9 +52,63 @@ function applyWindowSettings() {
   mainWindow.setAlwaysOnTop(Boolean(settings.keepOnTop));
   mainWindow.setSkipTaskbar(true);
   mainWindow.setResizable(false);
-  app.setLoginItemSettings({
-    openAtLogin: Boolean(settings.launchOnStartup),
-    path: process.execPath
+  if (app.isPackaged) {
+    app.setLoginItemSettings({
+      openAtLogin: Boolean(settings.launchOnStartup),
+      path: process.execPath
+    });
+  } else {
+    app.setLoginItemSettings({ openAtLogin: false });
+  }
+  if (settings.pinToDesktop) pinWindowToDesktop();
+}
+
+function nativeHandleDecimal() {
+  if (!mainWindow) return "0";
+  const handle = mainWindow.getNativeWindowHandle();
+  if (handle.length >= 8) return handle.readBigUInt64LE(0).toString();
+  return BigInt(handle.readUInt32LE(0)).toString();
+}
+
+function pinWindowToDesktop() {
+  if (process.platform !== "win32" || !mainWindow) return;
+  const hwnd = nativeHandleDecimal();
+  const script = `
+$signature = @"
+using System;
+using System.Runtime.InteropServices;
+public static class Win32 {
+  public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+  [DllImport("user32.dll")] public static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
+  [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
+}
+"@
+Add-Type $signature -ErrorAction SilentlyContinue
+$progman = [Win32]::FindWindow("Progman", $null)
+$result = [IntPtr]::Zero
+[Win32]::SendMessageTimeout($progman, 0x052C, [IntPtr]::Zero, [IntPtr]::Zero, 0, 1000, [ref]$result) | Out-Null
+$workerw = [IntPtr]::Zero
+[Win32]::EnumWindows({
+  param([IntPtr]$tophandle, [IntPtr]$topptr)
+  $shellView = [Win32]::FindWindowEx($tophandle, [IntPtr]::Zero, "SHELLDLL_DefView", $null)
+  if ($shellView -ne [IntPtr]::Zero) {
+    $script:workerw = [Win32]::FindWindowEx([IntPtr]::Zero, $tophandle, "WorkerW", $null)
+  }
+  return $true
+}, [IntPtr]::Zero) | Out-Null
+if ($workerw -eq [IntPtr]::Zero) { $workerw = $progman }
+[Win32]::SetParent([IntPtr]${hwnd}, $workerw) | Out-Null
+`;
+
+  const child = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], {
+    windowsHide: true,
+    stdio: "ignore"
+  });
+  child.on("error", (error) => {
+    console.warn("[DecideLife widget] Pin to Desktop failed.", error);
   });
 }
 
@@ -122,6 +178,7 @@ ipcMain.handle("widget:get-settings", () => {
     keepOnTop: settings.keepOnTop,
     floatingMode: settings.floatingMode,
     minimalMode: settings.minimalMode,
+    pinToDesktop: settings.pinToDesktop,
     widgetSize: settings.widgetSize,
     rememberPosition: settings.rememberPosition,
     hideScrollbars: settings.hideScrollbars,
@@ -138,11 +195,17 @@ ipcMain.handle("widget:update-settings", (_event, partial) => {
     const bounds = mainWindow.getBounds();
     mainWindow.setBounds({ ...bounds, width: widthForSize(settings.widgetSize) });
   }
+  if (mainWindow && Object.prototype.hasOwnProperty.call(partial, "pinToDesktop") && !settings.pinToDesktop) {
+    const bounds = mainWindow.getBounds();
+    mainWindow.destroy();
+    createWidgetWindow(bounds);
+  }
   return {
     transparency: settings.transparency,
     keepOnTop: settings.keepOnTop,
     floatingMode: settings.floatingMode,
     minimalMode: settings.minimalMode,
+    pinToDesktop: settings.pinToDesktop,
     widgetSize: settings.widgetSize,
     rememberPosition: settings.rememberPosition,
     hideScrollbars: settings.hideScrollbars,

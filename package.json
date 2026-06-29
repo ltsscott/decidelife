@@ -10,7 +10,10 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "electron:dev": "electron .",
-    "electron:pack:win": "electron-builder --win --x64"
+    "electron:pack:win": "electron-builder --win --x64",
+    "widget:build": "next build",
+    "widget:installer:win": "npm run widget:build && electron-builder --win nsis --x64",
+    "widget:portable:win": "npm run widget:build && electron-builder --win portable --x64"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

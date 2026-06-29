@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Flame, Settings, Target } from "lucide-react";
-import { getScheduledDailyCompletionPercentage, isHabitScheduledForDate } from "@/lib/progression";
+import { getScheduledDailyCompletionPercentage, getScheduledHabitsForDate, isHabitScheduledForDate } from "@/lib/progression";
 import { hasSupabaseConfig } from "@/lib/supabase";
 import { useDecideLife } from "@/lib/local-store";
 
@@ -13,6 +13,7 @@ interface WidgetSettings {
   keepOnTop: boolean;
   floatingMode: boolean;
   minimalMode: boolean;
+  pinToDesktop: boolean;
   widgetSize: WidgetSize;
   rememberPosition: boolean;
   hideScrollbars: boolean;
@@ -34,6 +35,7 @@ const defaultSettings: WidgetSettings = {
   keepOnTop: false,
   floatingMode: true,
   minimalMode: false,
+  pinToDesktop: false,
   widgetSize: "medium",
   rememberPosition: true,
   hideScrollbars: true,
@@ -135,11 +137,27 @@ export default function WidgetPage() {
   };
 
   const todaysHabits = useMemo(
-    () => habits
-      .filter((habit) => habit.unlocked && !habit.archived && isHabitScheduledForDate(habit, today))
-      .sort((a, b) => a.order - b.order),
+    () => getScheduledHabitsForDate(habits, today).sort((a, b) => a.order - b.order),
     [habits, today]
   );
+
+  useEffect(() => {
+    console.info("[DecideLife widget] Habit query", {
+      date: today,
+      totalHabits: habits.length,
+      visibleScheduledHabits: todaysHabits.length,
+      habits: habits.map((habit) => ({
+        id: habit.id,
+        name: habit.name,
+        unlocked: habit.unlocked,
+        archived: habit.archived,
+        scheduledToday: isHabitScheduledForDate(habit, today),
+        order: habit.order,
+        baseXp: habit.baseXp,
+        activeDays: habit.activeDays
+      }))
+    });
+  }, [habits, todaysHabits.length, today]);
   const completion = getScheduledDailyCompletionPercentage(habits, todayCompletedHabitIds, today);
   const activeMission = missions.find((mission) => !mission.archived && !mission.locked && !mission.completed);
   const currentStreak = Math.max(0, ...habits.filter((habit) => !habit.archived).map((habit) => habit.currentStreak));
@@ -201,6 +219,7 @@ export default function WidgetPage() {
               </label>
               {[
                 ["keepOnTop", "Keep on Top"],
+                ["pinToDesktop", "Pin to Desktop"],
                 ["floatingMode", "Floating Widget Mode"],
                 ["minimalMode", "Minimal Mode"],
                 ["rememberPosition", "Remember Window Position"],
@@ -269,8 +288,8 @@ export default function WidgetPage() {
                       type="button"
                       className={`widget-no-drag grid h-5 w-5 shrink-0 place-items-center rounded-md border transition ${done ? "border-cyan bg-cyan text-slate-950" : "border-slate-500 bg-black/20 text-transparent group-hover:border-cyan"}`}
                       onClick={() => {
-                        if (done) uncompleteHabit(habit.id, today);
-                        else completeHabit(habit.id, today);
+                        if (done) uncompleteHabit(habit.id, today, "widget");
+                        else completeHabit(habit.id, today, undefined, "widget");
                       }}
                     >
                       <Check className="h-3.5 w-3.5" />
