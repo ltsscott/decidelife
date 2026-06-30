@@ -57,6 +57,7 @@ interface DecideLifeContextValue extends DecideLifeState {
   notification: string | null;
   authReady: boolean;
   isAuthenticated: boolean;
+  syncError: string | null;
 }
 
 const STORAGE_KEY = "decidelife-state-v1";
@@ -389,6 +390,7 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
   const [notification, setNotification] = useState<string | null>(null);
   const [supabaseUser, setSupabaseUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -405,6 +407,7 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
         console.info("[DecideLife sync] Loading Supabase state", { userId: user.id, fallbackLevel: fallback.profile.currentLevel, fallbackXp: fallback.profile.totalXp });
         const remote = await loadSupabaseState(user, attachSupabaseUser(fallback, user));
         if (cancelled) return;
+        setSyncError(null);
         const reviewed = closePendingPreviousDays(normalizeState(remote));
         const next = attachSupabaseUser(reviewed, user);
         console.info("[DecideLife sync] Supabase state loaded", {
@@ -425,6 +428,7 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
         await saveSupabaseState(user.id, next);
       } catch (error) {
         console.warn("DecideLife Supabase sync failed. Staying in local fallback mode.", error);
+        setSyncError(error instanceof Error ? error.message : "Supabase sync failed.");
       } finally {
         if (!cancelled) setAuthReady(true);
       }
@@ -482,6 +486,7 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
           if (cancelled) return;
           const reviewed = closePendingPreviousDays(normalizeState(remote));
           const next = attachSupabaseUser(reviewed, supabaseUser);
+          setSyncError(null);
           console.info("[DecideLife sync] Remote refresh applied", {
             userId: supabaseUser.id,
             level: next.profile.currentLevel,
@@ -499,6 +504,7 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
           saveState(next);
         }).catch((error) => {
           console.warn("DecideLife Supabase refresh failed.", error);
+          setSyncError(error instanceof Error ? error.message : "Supabase refresh failed.");
         });
       }, 700);
     };
@@ -882,6 +888,7 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
       notification,
       authReady,
       isAuthenticated: Boolean(supabaseUser),
+      syncError,
       completeHabit,
       uncompleteHabit,
       missHabit,
@@ -910,7 +917,7 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
       setHabitTestingStreakOverride,
       clearHabitTestingStreakOverride
     };
-  }, [state, notification, supabaseUser, authReady]);
+  }, [state, notification, supabaseUser, authReady, syncError]);
 
   return <DecideLifeContext.Provider value={value}>{children}</DecideLifeContext.Provider>;
 }

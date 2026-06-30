@@ -447,6 +447,11 @@ function rowToMilestone(row: JourneyMilestoneRow): JourneyMilestone {
   };
 }
 
+function throwIfSupabaseError(label: string, error: unknown) {
+  if (!error) return;
+  throw new Error(`Supabase ${label} query failed: ${JSON.stringify(error)}`);
+}
+
 export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteState) {
   if (!supabase) return fallback;
 
@@ -477,6 +482,30 @@ export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteSt
     supabase.from("personal_quotes").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
     supabase.from("journey_milestones").select("*").eq("user_id", user.id).order("date", { ascending: false })
   ]);
+
+  throwIfSupabaseError("profiles", profileResult.error);
+  throwIfSupabaseError("user_progress", progressResult.error);
+  throwIfSupabaseError("habits", habitsResult.error);
+  throwIfSupabaseError("habit_logs", logsResult.error);
+  throwIfSupabaseError("missions", missionsResult.error);
+  throwIfSupabaseError("journal_entries", journalResult.error);
+  throwIfSupabaseError("streak_protectors", protectorsResult.error);
+  throwIfSupabaseError("trading_journal_entries", tradingJournalResult.error);
+  throwIfSupabaseError("trading_notes", tradingNotesResult.error);
+  throwIfSupabaseError("trading_rules", tradingRulesResult.error);
+  throwIfSupabaseError("personal_quotes", quotesResult.error);
+  throwIfSupabaseError("journey_milestones", milestonesResult.error);
+
+  console.info("[DecideLife sync] Supabase query counts", {
+    userId: user.id,
+    profiles: profileResult.data ? 1 : 0,
+    progress: progressResult.data ? 1 : 0,
+    habits: habitsResult.data?.length ?? 0,
+    habitLogs: logsResult.data?.length ?? 0,
+    missions: missionsResult.data?.length ?? 0,
+    journalEntries: journalResult.data?.length ?? 0,
+    protectors: protectorsResult.data?.length ?? 0
+  });
 
   if (
     !profileResult.data &&
@@ -517,16 +546,16 @@ export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteSt
 
   return {
     profile,
-    habits: habitsResult.data?.length ? (habitsResult.data as HabitRow[]).map(rowToHabit) : fallback.habits,
-    habitLogs: logsResult.data?.length ? (logsResult.data as HabitLogRow[]).map(rowToHabitLog) : fallback.habitLogs,
-    missions: missionsResult.data?.length ? (missionsResult.data as MissionRow[]).map(rowToMission) : fallback.missions,
-    journalEntries: journalResult.data?.length ? (journalResult.data as JournalEntryRow[]).map(rowToJournalEntry) : fallback.journalEntries,
-    protectors: protectorsResult.data?.length ? (protectorsResult.data as ProtectorRow[]).map(rowToProtector) : fallback.protectors,
-    tradingJournalEntries: tradingJournalResult.data?.length ? (tradingJournalResult.data as TradingJournalRow[]).map(rowToTradingJournal) : fallback.tradingJournalEntries,
-    tradingNotes: tradingNotesResult.data?.length ? (tradingNotesResult.data as TradingNoteRow[]).map(rowToTradingNote) : fallback.tradingNotes,
-    tradingRules: tradingRulesResult.data?.length ? (tradingRulesResult.data as TradingRuleRow[]).map(rowToTradingRule) : fallback.tradingRules,
-    personalQuotes: quotesResult.data?.length ? (quotesResult.data as PersonalQuoteRow[]).map(rowToQuote) : fallback.personalQuotes,
-    journeyMilestones: milestonesResult.data?.length ? (milestonesResult.data as JourneyMilestoneRow[]).map(rowToMilestone) : fallback.journeyMilestones,
+    habits: ((habitsResult.data ?? []) as HabitRow[]).map(rowToHabit),
+    habitLogs: ((logsResult.data ?? []) as HabitLogRow[]).map(rowToHabitLog),
+    missions: ((missionsResult.data ?? []) as MissionRow[]).map(rowToMission),
+    journalEntries: ((journalResult.data ?? []) as JournalEntryRow[]).map(rowToJournalEntry),
+    protectors: ((protectorsResult.data ?? []) as ProtectorRow[]).map(rowToProtector),
+    tradingJournalEntries: ((tradingJournalResult.data ?? []) as TradingJournalRow[]).map(rowToTradingJournal),
+    tradingNotes: ((tradingNotesResult.data ?? []) as TradingNoteRow[]).map(rowToTradingNote),
+    tradingRules: ((tradingRulesResult.data ?? []) as TradingRuleRow[]).map(rowToTradingRule),
+    personalQuotes: ((quotesResult.data ?? []) as PersonalQuoteRow[]).map(rowToQuote),
+    journeyMilestones: ((milestonesResult.data ?? []) as JourneyMilestoneRow[]).map(rowToMilestone),
     lastHabitReviewDate: progress?.last_habit_review_date ?? fallback.lastHabitReviewDate
   };
 }

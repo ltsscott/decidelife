@@ -71,7 +71,8 @@ export default function WidgetPage() {
     completeHabit,
     uncompleteHabit,
     authReady,
-    isAuthenticated
+    isAuthenticated,
+    syncError
   } = useDecideLife();
   const [settings, setSettings] = useState<WidgetSettings>(defaultSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -176,6 +177,18 @@ export default function WidgetPage() {
     return (
       <main className="grid min-h-screen place-items-center bg-transparent p-3 text-white">
         <section className="widget-floating-text p-5 text-sm text-slate-300">Syncing DecideLife account...</section>
+      </main>
+    );
+  }
+
+  if (authReady && hasSupabaseConfig && isAuthenticated && syncError) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-transparent p-3 text-white">
+        <section className="widget-floating-text max-w-sm p-5 text-sm text-slate-200">
+          <p className="font-semibold text-cyan">Supabase sync issue</p>
+          <p className="mt-2 text-slate-300">The widget is not showing fallback habits because online data did not load cleanly.</p>
+          <p className="mt-2 break-words text-xs text-slate-500">{syncError}</p>
+        </section>
       </main>
     );
   }
