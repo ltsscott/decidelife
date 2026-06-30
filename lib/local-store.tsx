@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { habits as seedHabits, habitLogs as seedHabitLogs, journalEntries as seedJournalEntries, journeyMilestones as seedJourneyMilestones, missions as seedMissions, personalQuotes as seedPersonalQuotes, streakProtectorUsages as seedProtectors, tradingJournalEntries as seedTradingJournalEntries, tradingNotes as seedTradingNotes, tradingRules as seedTradingRules, userProfile as seedProfile } from "@/lib/mock-data";
 import { calculateLevelProgress, getHabitCompletionXp, getProtectorUsageForCurrentMonth, getScheduledDailyCompletionPercentage, isHabitScheduledForDate, unlockMissions } from "@/lib/progression";
 import { hasSupabaseConfig, supabase } from "@/lib/supabase";
-import { loadSupabaseState, saveSupabaseState } from "@/lib/supabase-data";
+import { loadSupabaseState, loadWidgetState, saveSupabaseState, saveWidgetState } from "@/lib/supabase-data";
 import type { AppTheme, Habit, HabitLog, JournalEntry, JourneyMilestone, Mission, PersonalQuote, StreakProtectorUsage, TradingJournalEntry, TradingNote, TradingRule, UserProfile } from "@/types";
 import type { User } from "@supabase/supabase-js";
 
@@ -421,10 +421,12 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
           fallbackLevel: fallback.profile.currentLevel,
           fallbackXp: fallback.profile.totalXp
         });
-        const remote = await loadSupabaseState(user, attachSupabaseUser(fallback, user), {
-          route,
-          includeTrading: shouldLoadTradingForRoute(route)
-        });
+        const remote = route === "/widget"
+          ? await loadWidgetState(user, attachSupabaseUser(fallback, user))
+          : await loadSupabaseState(user, attachSupabaseUser(fallback, user), {
+              route,
+              includeTrading: shouldLoadTradingForRoute(route)
+            });
         if (cancelled) return;
         setSyncError(null);
         const reviewed = closePendingPreviousDays(normalizeState(remote));
@@ -444,7 +446,11 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
         });
         setState(next);
         saveState(next);
-        await saveSupabaseState(user.id, next, { route, includeTrading: shouldLoadTradingForRoute(route) });
+        if (route === "/widget") {
+          await saveWidgetState(user.id, next);
+        } else {
+          await saveSupabaseState(user.id, next, { route, includeTrading: shouldLoadTradingForRoute(route) });
+        }
       } catch (error) {
         console.warn("DecideLife Supabase sync failed. Staying in local fallback mode.", error);
         setSyncError(error instanceof Error ? error.message : "Supabase sync failed.");
@@ -506,10 +512,13 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
           route,
           includeTrading: shouldLoadTradingForRoute(route)
         });
-        void loadSupabaseState(supabaseUser, fallback, {
-          route,
-          includeTrading: shouldLoadTradingForRoute(route)
-        }).then((remote) => {
+        const loadState = route === "/widget"
+          ? loadWidgetState(supabaseUser, fallback)
+          : loadSupabaseState(supabaseUser, fallback, {
+              route,
+              includeTrading: shouldLoadTradingForRoute(route)
+            });
+        void loadState.then((remote) => {
           if (cancelled) return;
           const reviewed = closePendingPreviousDays(normalizeState(remote));
           const next = attachSupabaseUser(reviewed, supabaseUser);
@@ -574,7 +583,10 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
           level: onlineState.profile.currentLevel,
           xp: onlineState.profile.totalXp
         });
-        void saveSupabaseState(supabaseUser.id, onlineState, { route, includeTrading: shouldLoadTradingForRoute(route) }).catch((error) => {
+        const saveStatePromise = route === "/widget"
+          ? saveWidgetState(supabaseUser.id, onlineState)
+          : saveSupabaseState(supabaseUser.id, onlineState, { route, includeTrading: shouldLoadTradingForRoute(route) });
+        void saveStatePromise.catch((error) => {
           console.warn("DecideLife Supabase save failed. Local fallback was saved.", error);
         });
       }
@@ -858,7 +870,10 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
     saveState(freshState);
     if (supabaseUser) {
       const route = currentRoute();
-      void saveSupabaseState(supabaseUser.id, freshState, { route, includeTrading: shouldLoadTradingForRoute(route) }).catch((error) => {
+      const saveStatePromise = route === "/widget"
+        ? saveWidgetState(supabaseUser.id, freshState)
+        : saveSupabaseState(supabaseUser.id, freshState, { route, includeTrading: shouldLoadTradingForRoute(route) });
+      void saveStatePromise.catch((error) => {
         console.warn("DecideLife Supabase reset save failed. Local fallback was reset.", error);
       });
     }
@@ -876,7 +891,10 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
     saveState(freshState);
     if (supabaseUser) {
       const route = currentRoute();
-      void saveSupabaseState(supabaseUser.id, freshState, { route, includeTrading: shouldLoadTradingForRoute(route) }).catch((error) => {
+      const saveStatePromise = route === "/widget"
+        ? saveWidgetState(supabaseUser.id, freshState)
+        : saveSupabaseState(supabaseUser.id, freshState, { route, includeTrading: shouldLoadTradingForRoute(route) });
+      void saveStatePromise.catch((error) => {
         console.warn("DecideLife Supabase reset save failed. Local fallback was reset.", error);
       });
     }

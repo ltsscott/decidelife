@@ -17,6 +17,16 @@ export interface DecideLifeRemoteState {
   lastHabitReviewDate: string;
 }
 
+const WIDGET_TABLES = ["profiles", "user_progress", "habits", "habit_logs", "missions", "streak_protectors"];
+const WIDGET_SKIPPED_TABLES = [
+  "journal_entries",
+  "personal_quotes",
+  "trading_journal_entries",
+  "trading_notes",
+  "trading_rules",
+  "journey_milestones"
+];
+
 interface LoadSupabaseStateOptions {
   route?: string;
   includeTrading?: boolean;
@@ -472,6 +482,112 @@ function throwIfSupabaseError(label: string, error: unknown) {
   throw new Error(`Supabase ${label} query failed: ${JSON.stringify(error)}`);
 }
 
+function throwIfRequiredWidgetError(label: string, error: unknown) {
+  if (!error) return;
+  throw new Error(`Supabase widget ${label} query failed: ${JSON.stringify(error)}`);
+}
+
+async function runOptionalWidgetQuery<T>(label: string, route: string, query: PromiseLike<{ data: T | null; error: unknown }>, fallback: T) {
+  const result = await query;
+  logSupabaseTableRequest(label, route, result.error, Array.isArray(result.data) ? result.data.length : result.data ? 1 : 0);
+  if (result.error) {
+    console.warn("[DecideLife widget sync] Optional table unavailable. Continuing widget load.", { route, table: label, error: result.error });
+    return fallback;
+  }
+  return result.data ?? fallback;
+}
+
+export async function loadWidgetState(user: User, fallback: DecideLifeRemoteState) {
+  if (!supabase) return fallback;
+  const route = "/widget";
+  console.info("[DecideLife widget sync] Loading lightweight widget state", {
+    route,
+    userId: user.id,
+    tables: WIDGET_TABLES,
+    skippedTables: WIDGET_SKIPPED_TABLES
+  });
+
+  const [
+    profileResult,
+    progressResult,
+    habitsResult,
+    logsResult,
+    missionsResult
+  ] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+    supabase.from("user_progress").select("*").eq("user_id", user.id).maybeSingle(),
+    supabase.from("habits").select("*").eq("user_id", user.id).order("order_position"),
+    supabase.from("habit_logs").select("*").eq("user_id", user.id).order("date"),
+    supabase.from("missions").select("*").eq("user_id", user.id)
+  ]);
+
+  logSupabaseTableRequest("profiles", route, profileResult.error, profileResult.data ? 1 : 0);
+  logSupabaseTableRequest("user_progress", route, progressResult.error, progressResult.data ? 1 : 0);
+  logSupabaseTableRequest("habits", route, habitsResult.error, habitsResult.data?.length ?? 0);
+  logSupabaseTableRequest("habit_logs", route, logsResult.error, logsResult.data?.length ?? 0);
+  logSupabaseTableRequest("missions", route, missionsResult.error, missionsResult.data?.length ?? 0);
+  console.info("[DecideLife widget sync] Skipped optional tables", { route, skippedTables: WIDGET_SKIPPED_TABLES });
+
+  throwIfRequiredWidgetError("profiles", profileResult.error);
+  throwIfRequiredWidgetError("user_progress", progressResult.error);
+  throwIfRequiredWidgetError("habits", habitsResult.error);
+  throwIfRequiredWidgetError("habit_logs", logsResult.error);
+  throwIfRequiredWidgetError("missions", missionsResult.error);
+
+  const protectors = await runOptionalWidgetQuery(
+    "streak_protectors",
+    route,
+    supabase.from("streak_protectors").select("*").eq("user_id", user.id),
+    []
+  );
+
+  if (
+    !profileResult.data &&
+    !progressResult.data &&
+    !habitsResult.data?.length &&
+    !missionsResult.data?.length
+  ) {
+    const seeded = {
+      ...fallback,
+      profile: withUserProfile(fallback.profile, user),
+      protectors: fallback.protectors.map((usage) => ({ ...usage, userId: user.id }))
+    };
+    await saveWidgetState(user.id, seeded);
+    return seeded;
+  }
+
+  const progress = progressResult.data;
+  const profile = withUserProfile(
+    {
+      ...fallback.profile,
+      displayName: profileResult.data?.display_name ?? fallback.profile.displayName,
+      email: profileResult.data?.email ?? user.email ?? fallback.profile.email,
+      totalXp: progress?.total_xp ?? fallback.profile.totalXp,
+      currentLevel: progress?.current_level ?? fallback.profile.currentLevel,
+      highestLevelReached: progress?.highest_level_reached ?? fallback.profile.highestLevelReached,
+      currentTitle: progress?.current_title ?? fallback.profile.currentTitle,
+      createdAt: profileResult.data?.created_at ?? fallback.profile.createdAt,
+      theme: profileResult.data?.theme ?? fallback.profile.theme,
+      tradingAccountType: profileResult.data?.trading_account_type ?? fallback.profile.tradingAccountType,
+      dailyBonusXp: profileResult.data?.daily_bonus_xp ?? fallback.profile.dailyBonusXp,
+      reflectionReminderTime: profileResult.data?.reflection_reminder_time ?? fallback.profile.reflectionReminderTime,
+      lastMorningBriefDate: profileResult.data?.last_morning_brief_date ?? fallback.profile.lastMorningBriefDate,
+      lastDailyVictoryDate: profileResult.data?.last_daily_victory_date ?? fallback.profile.lastDailyVictoryDate
+    },
+    user
+  );
+
+  return {
+    ...fallback,
+    profile,
+    habits: ((habitsResult.data ?? []) as HabitRow[]).map(rowToHabit),
+    habitLogs: ((logsResult.data ?? []) as HabitLogRow[]).map(rowToHabitLog),
+    missions: ((missionsResult.data ?? []) as MissionRow[]).map(rowToMission),
+    protectors: ((protectors ?? []) as ProtectorRow[]).map(rowToProtector),
+    lastHabitReviewDate: progress?.last_habit_review_date ?? fallback.lastHabitReviewDate
+  };
+}
+
 export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteState, options: LoadSupabaseStateOptions = {}) {
   if (!supabase) return fallback;
   const route = options.route ?? "unknown";
@@ -537,13 +653,13 @@ export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteSt
   throwIfSupabaseError("habits", habitsResult.error);
   throwIfSupabaseError("habit_logs", logsResult.error);
   throwIfSupabaseError("missions", missionsResult.error);
-  throwIfSupabaseError("journal_entries", journalResult.error);
-  throwIfSupabaseError("streak_protectors", protectorsResult.error);
+  if (journalResult.error && !isMissingTableError(journalResult.error)) throwIfSupabaseError("journal_entries", journalResult.error);
+  if (protectorsResult.error && !isMissingTableError(protectorsResult.error)) throwIfSupabaseError("streak_protectors", protectorsResult.error);
   if (includeTrading && tradingJournalResult.error && !isMissingTableError(tradingJournalResult.error)) throwIfSupabaseError("trading_journal_entries", tradingJournalResult.error);
   if (includeTrading && tradingNotesResult.error && !isMissingTableError(tradingNotesResult.error)) throwIfSupabaseError("trading_notes", tradingNotesResult.error);
   if (includeTrading && tradingRulesResult.error && !isMissingTableError(tradingRulesResult.error)) throwIfSupabaseError("trading_rules", tradingRulesResult.error);
-  throwIfSupabaseError("personal_quotes", quotesResult.error);
-  throwIfSupabaseError("journey_milestones", milestonesResult.error);
+  if (quotesResult.error && !isMissingTableError(quotesResult.error)) throwIfSupabaseError("personal_quotes", quotesResult.error);
+  if (milestonesResult.error && !isMissingTableError(milestonesResult.error)) throwIfSupabaseError("journey_milestones", milestonesResult.error);
 
   console.info("[DecideLife sync] Supabase query counts", {
     userId: user.id,
@@ -598,13 +714,13 @@ export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteSt
     habits: ((habitsResult.data ?? []) as HabitRow[]).map(rowToHabit),
     habitLogs: ((logsResult.data ?? []) as HabitLogRow[]).map(rowToHabitLog),
     missions: ((missionsResult.data ?? []) as MissionRow[]).map(rowToMission),
-    journalEntries: ((journalResult.data ?? []) as JournalEntryRow[]).map(rowToJournalEntry),
-    protectors: ((protectorsResult.data ?? []) as ProtectorRow[]).map(rowToProtector),
+    journalEntries: !journalResult.error ? ((journalResult.data ?? []) as JournalEntryRow[]).map(rowToJournalEntry) : fallback.journalEntries,
+    protectors: !protectorsResult.error ? ((protectorsResult.data ?? []) as ProtectorRow[]).map(rowToProtector) : fallback.protectors,
     tradingJournalEntries: includeTrading && !tradingJournalResult.error ? ((tradingJournalResult.data ?? []) as TradingJournalRow[]).map(rowToTradingJournal) : fallback.tradingJournalEntries,
     tradingNotes: includeTrading && !tradingNotesResult.error ? ((tradingNotesResult.data ?? []) as TradingNoteRow[]).map(rowToTradingNote) : fallback.tradingNotes,
     tradingRules: includeTrading && !tradingRulesResult.error ? ((tradingRulesResult.data ?? []) as TradingRuleRow[]).map(rowToTradingRule) : fallback.tradingRules,
-    personalQuotes: ((quotesResult.data ?? []) as PersonalQuoteRow[]).map(rowToQuote),
-    journeyMilestones: ((milestonesResult.data ?? []) as JourneyMilestoneRow[]).map(rowToMilestone),
+    personalQuotes: !quotesResult.error ? ((quotesResult.data ?? []) as PersonalQuoteRow[]).map(rowToQuote) : fallback.personalQuotes,
+    journeyMilestones: !milestonesResult.error ? ((milestonesResult.data ?? []) as JourneyMilestoneRow[]).map(rowToMilestone) : fallback.journeyMilestones,
     lastHabitReviewDate: progress?.last_habit_review_date ?? fallback.lastHabitReviewDate
   };
 }
@@ -617,6 +733,65 @@ async function runOptionalSupabaseWrite(label: string, route: string, operation:
   }
   if (result.error) throw new Error(`Supabase ${label} write failed: ${JSON.stringify(result.error)}`);
   console.info("[DecideLife sync] Supabase table write succeeded", { route, table: label });
+}
+
+export async function saveWidgetState(userId: string, state: DecideLifeRemoteState) {
+  if (!supabase) return;
+  const supabaseClient = supabase;
+  const route = "/widget";
+  console.info("[DecideLife widget sync] Saving lightweight widget state", {
+    route,
+    userId,
+    tables: WIDGET_TABLES,
+    skippedTables: WIDGET_SKIPPED_TABLES
+  });
+
+  const profile = {
+    id: userId,
+    display_name: state.profile.displayName,
+    email: state.profile.email ?? null,
+    current_level: state.profile.currentLevel,
+    total_xp: state.profile.totalXp,
+    highest_level_reached: state.profile.highestLevelReached,
+    current_title: state.profile.currentTitle,
+    theme: state.profile.theme,
+    trading_account_type: state.profile.tradingAccountType,
+    daily_bonus_xp: state.profile.dailyBonusXp,
+    reflection_reminder_time: state.profile.reflectionReminderTime ?? null,
+    last_morning_brief_date: state.profile.lastMorningBriefDate ?? null,
+    last_daily_victory_date: state.profile.lastDailyVictoryDate ?? null,
+    created_at: state.profile.createdAt,
+    updated_at: new Date().toISOString()
+  };
+
+  const progress = {
+    user_id: userId,
+    total_xp: state.profile.totalXp,
+    current_level: state.profile.currentLevel,
+    highest_level_reached: state.profile.highestLevelReached,
+    current_title: state.profile.currentTitle,
+    last_habit_review_date: state.lastHabitReviewDate,
+    updated_at: new Date().toISOString()
+  };
+
+  await runOptionalSupabaseWrite("profiles", route, () => supabaseClient.from("profiles").upsert(profile));
+  await runOptionalSupabaseWrite("user_progress", route, () => supabaseClient.from("user_progress").upsert(progress));
+
+  await Promise.all([
+    runOptionalSupabaseWrite("habit_logs", route, () => supabaseClient.from("habit_logs").delete().eq("user_id", userId)),
+    runOptionalSupabaseWrite("habits", route, () => supabaseClient.from("habits").delete().eq("user_id", userId)),
+    runOptionalSupabaseWrite("missions", route, () => supabaseClient.from("missions").delete().eq("user_id", userId)),
+    runOptionalSupabaseWrite("streak_protectors", route, () => supabaseClient.from("streak_protectors").delete().eq("user_id", userId))
+  ]);
+
+  await Promise.all([
+    state.habits.length ? runOptionalSupabaseWrite("habits", route, () => supabaseClient.from("habits").insert(state.habits.map((habit) => habitToRow(habit, userId)))) : Promise.resolve(),
+    state.habitLogs.length ? runOptionalSupabaseWrite("habit_logs", route, () => supabaseClient.from("habit_logs").insert(state.habitLogs.map((log) => habitLogToRow(log, userId)))) : Promise.resolve(),
+    state.missions.length ? runOptionalSupabaseWrite("missions", route, () => supabaseClient.from("missions").insert(state.missions.map((mission) => missionToRow(mission, userId)))) : Promise.resolve(),
+    state.protectors.length ? runOptionalSupabaseWrite("streak_protectors", route, () => supabaseClient.from("streak_protectors").insert(state.protectors.map((usage) => protectorToRow(usage, userId)))) : Promise.resolve()
+  ]);
+
+  console.info("[DecideLife widget sync] Widget save skipped optional tables", { route, skippedTables: WIDGET_SKIPPED_TABLES });
 }
 
 export async function saveSupabaseState(userId: string, state: DecideLifeRemoteState, options: LoadSupabaseStateOptions = {}) {
