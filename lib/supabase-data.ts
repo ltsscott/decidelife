@@ -17,6 +17,11 @@ export interface DecideLifeRemoteState {
   lastHabitReviewDate: string;
 }
 
+interface LoadSupabaseStateOptions {
+  route?: string;
+  includeTrading?: boolean;
+}
+
 type HabitRow = {
   id: string;
   user_id: string;
@@ -447,13 +452,31 @@ function rowToMilestone(row: JourneyMilestoneRow): JourneyMilestone {
   };
 }
 
+function isMissingTableError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const maybeError = error as { code?: string; message?: string; details?: string; hint?: string };
+  return maybeError.code === "PGRST205" ||
+    `${maybeError.message ?? ""} ${maybeError.details ?? ""} ${maybeError.hint ?? ""}`.includes("Could not find the table");
+}
+
+function logSupabaseTableRequest(label: string, route: string, error: unknown, count?: number) {
+  if (error) {
+    console.warn("[DecideLife sync] Supabase table query failed", { route, table: label, error });
+    return;
+  }
+  console.info("[DecideLife sync] Supabase table query succeeded", { route, table: label, count: count ?? 0 });
+}
+
 function throwIfSupabaseError(label: string, error: unknown) {
   if (!error) return;
   throw new Error(`Supabase ${label} query failed: ${JSON.stringify(error)}`);
 }
 
-export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteState) {
+export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteState, options: LoadSupabaseStateOptions = {}) {
   if (!supabase) return fallback;
+  const route = options.route ?? "unknown";
+  const includeTrading = options.includeTrading ?? route !== "/widget";
+  console.info("[DecideLife sync] Loading Supabase state", { route, includeTrading, userId: user.id });
 
   const [
     profileResult,
@@ -463,9 +486,6 @@ export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteSt
     missionsResult,
     journalResult,
     protectorsResult,
-    tradingJournalResult,
-    tradingNotesResult,
-    tradingRulesResult,
     quotesResult,
     milestonesResult
   ] = await Promise.all([
@@ -476,12 +496,41 @@ export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteSt
     supabase.from("missions").select("*").eq("user_id", user.id),
     supabase.from("journal_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }),
     supabase.from("streak_protectors").select("*").eq("user_id", user.id),
-    supabase.from("trading_journal_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }),
-    supabase.from("trading_notes").select("*").eq("user_id", user.id).order("date", { ascending: false }),
-    supabase.from("trading_rules").select("*").eq("user_id", user.id),
     supabase.from("personal_quotes").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
     supabase.from("journey_milestones").select("*").eq("user_id", user.id).order("date", { ascending: false })
   ]);
+
+  let tradingJournalResult: { data: unknown[] | null; error: unknown } = { data: includeTrading ? fallback.tradingJournalEntries : [], error: null };
+  let tradingNotesResult: { data: unknown[] | null; error: unknown } = { data: includeTrading ? fallback.tradingNotes : [], error: null };
+  let tradingRulesResult: { data: unknown[] | null; error: unknown } = { data: includeTrading ? fallback.tradingRules : [], error: null };
+
+  if (includeTrading) {
+    const [journal, notes, rules] = await Promise.all([
+      supabase.from("trading_journal_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }),
+      supabase.from("trading_notes").select("*").eq("user_id", user.id).order("date", { ascending: false }),
+      supabase.from("trading_rules").select("*").eq("user_id", user.id)
+    ]);
+    tradingJournalResult = journal;
+    tradingNotesResult = notes;
+    tradingRulesResult = rules;
+  } else {
+    console.info("[DecideLife sync] Skipping trading tables for route", { route, tables: ["trading_journal_entries", "trading_notes", "trading_rules"] });
+  }
+
+  logSupabaseTableRequest("profiles", route, profileResult.error, profileResult.data ? 1 : 0);
+  logSupabaseTableRequest("user_progress", route, progressResult.error, progressResult.data ? 1 : 0);
+  logSupabaseTableRequest("habits", route, habitsResult.error, habitsResult.data?.length ?? 0);
+  logSupabaseTableRequest("habit_logs", route, logsResult.error, logsResult.data?.length ?? 0);
+  logSupabaseTableRequest("missions", route, missionsResult.error, missionsResult.data?.length ?? 0);
+  logSupabaseTableRequest("journal_entries", route, journalResult.error, journalResult.data?.length ?? 0);
+  logSupabaseTableRequest("streak_protectors", route, protectorsResult.error, protectorsResult.data?.length ?? 0);
+  if (includeTrading) {
+    logSupabaseTableRequest("trading_journal_entries", route, tradingJournalResult.error, tradingJournalResult.data?.length ?? 0);
+    logSupabaseTableRequest("trading_notes", route, tradingNotesResult.error, tradingNotesResult.data?.length ?? 0);
+    logSupabaseTableRequest("trading_rules", route, tradingRulesResult.error, tradingRulesResult.data?.length ?? 0);
+  }
+  logSupabaseTableRequest("personal_quotes", route, quotesResult.error, quotesResult.data?.length ?? 0);
+  logSupabaseTableRequest("journey_milestones", route, milestonesResult.error, milestonesResult.data?.length ?? 0);
 
   throwIfSupabaseError("profiles", profileResult.error);
   throwIfSupabaseError("user_progress", progressResult.error);
@@ -490,9 +539,9 @@ export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteSt
   throwIfSupabaseError("missions", missionsResult.error);
   throwIfSupabaseError("journal_entries", journalResult.error);
   throwIfSupabaseError("streak_protectors", protectorsResult.error);
-  throwIfSupabaseError("trading_journal_entries", tradingJournalResult.error);
-  throwIfSupabaseError("trading_notes", tradingNotesResult.error);
-  throwIfSupabaseError("trading_rules", tradingRulesResult.error);
+  if (includeTrading && tradingJournalResult.error && !isMissingTableError(tradingJournalResult.error)) throwIfSupabaseError("trading_journal_entries", tradingJournalResult.error);
+  if (includeTrading && tradingNotesResult.error && !isMissingTableError(tradingNotesResult.error)) throwIfSupabaseError("trading_notes", tradingNotesResult.error);
+  if (includeTrading && tradingRulesResult.error && !isMissingTableError(tradingRulesResult.error)) throwIfSupabaseError("trading_rules", tradingRulesResult.error);
   throwIfSupabaseError("personal_quotes", quotesResult.error);
   throwIfSupabaseError("journey_milestones", milestonesResult.error);
 
@@ -551,17 +600,31 @@ export async function loadSupabaseState(user: User, fallback: DecideLifeRemoteSt
     missions: ((missionsResult.data ?? []) as MissionRow[]).map(rowToMission),
     journalEntries: ((journalResult.data ?? []) as JournalEntryRow[]).map(rowToJournalEntry),
     protectors: ((protectorsResult.data ?? []) as ProtectorRow[]).map(rowToProtector),
-    tradingJournalEntries: ((tradingJournalResult.data ?? []) as TradingJournalRow[]).map(rowToTradingJournal),
-    tradingNotes: ((tradingNotesResult.data ?? []) as TradingNoteRow[]).map(rowToTradingNote),
-    tradingRules: ((tradingRulesResult.data ?? []) as TradingRuleRow[]).map(rowToTradingRule),
+    tradingJournalEntries: includeTrading && !tradingJournalResult.error ? ((tradingJournalResult.data ?? []) as TradingJournalRow[]).map(rowToTradingJournal) : fallback.tradingJournalEntries,
+    tradingNotes: includeTrading && !tradingNotesResult.error ? ((tradingNotesResult.data ?? []) as TradingNoteRow[]).map(rowToTradingNote) : fallback.tradingNotes,
+    tradingRules: includeTrading && !tradingRulesResult.error ? ((tradingRulesResult.data ?? []) as TradingRuleRow[]).map(rowToTradingRule) : fallback.tradingRules,
     personalQuotes: ((quotesResult.data ?? []) as PersonalQuoteRow[]).map(rowToQuote),
     journeyMilestones: ((milestonesResult.data ?? []) as JourneyMilestoneRow[]).map(rowToMilestone),
     lastHabitReviewDate: progress?.last_habit_review_date ?? fallback.lastHabitReviewDate
   };
 }
 
-export async function saveSupabaseState(userId: string, state: DecideLifeRemoteState) {
+async function runOptionalSupabaseWrite(label: string, route: string, operation: () => PromiseLike<{ error: unknown }>) {
+  const result = await operation();
+  if (result.error && isMissingTableError(result.error)) {
+    console.warn("[DecideLife sync] Optional Supabase table write skipped because table is unavailable", { route, table: label, error: result.error });
+    return;
+  }
+  if (result.error) throw new Error(`Supabase ${label} write failed: ${JSON.stringify(result.error)}`);
+  console.info("[DecideLife sync] Supabase table write succeeded", { route, table: label });
+}
+
+export async function saveSupabaseState(userId: string, state: DecideLifeRemoteState, options: LoadSupabaseStateOptions = {}) {
   if (!supabase) return;
+  const supabaseClient = supabase;
+  const route = options.route ?? "unknown";
+  const includeTrading = options.includeTrading ?? route !== "/widget";
+  console.info("[DecideLife sync] Saving Supabase state", { route, includeTrading, userId });
 
   const profile = {
     id: userId,
@@ -591,32 +654,32 @@ export async function saveSupabaseState(userId: string, state: DecideLifeRemoteS
     updated_at: new Date().toISOString()
   };
 
-  await supabase.from("profiles").upsert(profile);
-  await supabase.from("user_progress").upsert(progress);
+  await runOptionalSupabaseWrite("profiles", route, () => supabaseClient.from("profiles").upsert(profile));
+  await runOptionalSupabaseWrite("user_progress", route, () => supabaseClient.from("user_progress").upsert(progress));
 
   await Promise.all([
-    supabase.from("habit_logs").delete().eq("user_id", userId),
-    supabase.from("habits").delete().eq("user_id", userId),
-    supabase.from("missions").delete().eq("user_id", userId),
-    supabase.from("journal_entries").delete().eq("user_id", userId),
-    supabase.from("streak_protectors").delete().eq("user_id", userId),
-    supabase.from("trading_journal_entries").delete().eq("user_id", userId),
-    supabase.from("trading_notes").delete().eq("user_id", userId),
-    supabase.from("trading_rules").delete().eq("user_id", userId),
-    supabase.from("personal_quotes").delete().eq("user_id", userId),
-    supabase.from("journey_milestones").delete().eq("user_id", userId)
+    runOptionalSupabaseWrite("habit_logs", route, () => supabaseClient.from("habit_logs").delete().eq("user_id", userId)),
+    runOptionalSupabaseWrite("habits", route, () => supabaseClient.from("habits").delete().eq("user_id", userId)),
+    runOptionalSupabaseWrite("missions", route, () => supabaseClient.from("missions").delete().eq("user_id", userId)),
+    runOptionalSupabaseWrite("journal_entries", route, () => supabaseClient.from("journal_entries").delete().eq("user_id", userId)),
+    runOptionalSupabaseWrite("streak_protectors", route, () => supabaseClient.from("streak_protectors").delete().eq("user_id", userId)),
+    runOptionalSupabaseWrite("personal_quotes", route, () => supabaseClient.from("personal_quotes").delete().eq("user_id", userId)),
+    runOptionalSupabaseWrite("journey_milestones", route, () => supabaseClient.from("journey_milestones").delete().eq("user_id", userId)),
+    includeTrading ? runOptionalSupabaseWrite("trading_journal_entries", route, () => supabaseClient.from("trading_journal_entries").delete().eq("user_id", userId)) : Promise.resolve(),
+    includeTrading ? runOptionalSupabaseWrite("trading_notes", route, () => supabaseClient.from("trading_notes").delete().eq("user_id", userId)) : Promise.resolve(),
+    includeTrading ? runOptionalSupabaseWrite("trading_rules", route, () => supabaseClient.from("trading_rules").delete().eq("user_id", userId)) : Promise.resolve()
   ]);
 
   await Promise.all([
-    state.habits.length ? supabase.from("habits").insert(state.habits.map((habit) => habitToRow(habit, userId))) : Promise.resolve(),
-    state.habitLogs.length ? supabase.from("habit_logs").insert(state.habitLogs.map((log) => habitLogToRow(log, userId))) : Promise.resolve(),
-    state.missions.length ? supabase.from("missions").insert(state.missions.map((mission) => missionToRow(mission, userId))) : Promise.resolve(),
-    state.journalEntries.length ? supabase.from("journal_entries").insert(state.journalEntries.map((entry) => journalEntryToRow(entry, userId))) : Promise.resolve(),
-    state.protectors.length ? supabase.from("streak_protectors").insert(state.protectors.map((usage) => protectorToRow(usage, userId))) : Promise.resolve(),
-    state.tradingJournalEntries.length ? supabase.from("trading_journal_entries").insert(state.tradingJournalEntries.map((entry) => tradingJournalToRow(entry, userId))) : Promise.resolve(),
-    state.tradingNotes.length ? supabase.from("trading_notes").insert(state.tradingNotes.map((note) => tradingNoteToRow(note, userId))) : Promise.resolve(),
-    state.tradingRules.length ? supabase.from("trading_rules").insert(state.tradingRules.map((rule) => tradingRuleToRow(rule, userId))) : Promise.resolve(),
-    state.personalQuotes.length ? supabase.from("personal_quotes").insert(state.personalQuotes.map((quote) => quoteToRow(quote, userId))) : Promise.resolve(),
-    state.journeyMilestones.length ? supabase.from("journey_milestones").insert(state.journeyMilestones.map((milestone) => milestoneToRow(milestone, userId))) : Promise.resolve()
+    state.habits.length ? runOptionalSupabaseWrite("habits", route, () => supabaseClient.from("habits").insert(state.habits.map((habit) => habitToRow(habit, userId)))) : Promise.resolve(),
+    state.habitLogs.length ? runOptionalSupabaseWrite("habit_logs", route, () => supabaseClient.from("habit_logs").insert(state.habitLogs.map((log) => habitLogToRow(log, userId)))) : Promise.resolve(),
+    state.missions.length ? runOptionalSupabaseWrite("missions", route, () => supabaseClient.from("missions").insert(state.missions.map((mission) => missionToRow(mission, userId)))) : Promise.resolve(),
+    state.journalEntries.length ? runOptionalSupabaseWrite("journal_entries", route, () => supabaseClient.from("journal_entries").insert(state.journalEntries.map((entry) => journalEntryToRow(entry, userId)))) : Promise.resolve(),
+    state.protectors.length ? runOptionalSupabaseWrite("streak_protectors", route, () => supabaseClient.from("streak_protectors").insert(state.protectors.map((usage) => protectorToRow(usage, userId)))) : Promise.resolve(),
+    state.personalQuotes.length ? runOptionalSupabaseWrite("personal_quotes", route, () => supabaseClient.from("personal_quotes").insert(state.personalQuotes.map((quote) => quoteToRow(quote, userId)))) : Promise.resolve(),
+    state.journeyMilestones.length ? runOptionalSupabaseWrite("journey_milestones", route, () => supabaseClient.from("journey_milestones").insert(state.journeyMilestones.map((milestone) => milestoneToRow(milestone, userId)))) : Promise.resolve(),
+    includeTrading && state.tradingJournalEntries.length ? runOptionalSupabaseWrite("trading_journal_entries", route, () => supabaseClient.from("trading_journal_entries").insert(state.tradingJournalEntries.map((entry) => tradingJournalToRow(entry, userId)))) : Promise.resolve(),
+    includeTrading && state.tradingNotes.length ? runOptionalSupabaseWrite("trading_notes", route, () => supabaseClient.from("trading_notes").insert(state.tradingNotes.map((note) => tradingNoteToRow(note, userId)))) : Promise.resolve(),
+    includeTrading && state.tradingRules.length ? runOptionalSupabaseWrite("trading_rules", route, () => supabaseClient.from("trading_rules").insert(state.tradingRules.map((rule) => tradingRuleToRow(rule, userId)))) : Promise.resolve()
   ]);
 }

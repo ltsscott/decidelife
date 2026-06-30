@@ -197,6 +197,15 @@ function getStoredLocalState() {
   return stored ? normalizeState(JSON.parse(stored) as DecideLifeState) : createInitialState();
 }
 
+function currentRoute() {
+  if (typeof window === "undefined") return "server";
+  return window.location.pathname;
+}
+
+function shouldLoadTradingForRoute(route: string) {
+  return route !== "/widget";
+}
+
 function attachSupabaseUser(state: DecideLifeState, user: User): DecideLifeState {
   return {
     ...state,
@@ -404,8 +413,18 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
 
     const loadOnlineState = async (user: User, fallback: DecideLifeState) => {
       try {
-        console.info("[DecideLife sync] Loading Supabase state", { userId: user.id, fallbackLevel: fallback.profile.currentLevel, fallbackXp: fallback.profile.totalXp });
-        const remote = await loadSupabaseState(user, attachSupabaseUser(fallback, user));
+        const route = currentRoute();
+        console.info("[DecideLife sync] Loading Supabase state", {
+          userId: user.id,
+          route,
+          includeTrading: shouldLoadTradingForRoute(route),
+          fallbackLevel: fallback.profile.currentLevel,
+          fallbackXp: fallback.profile.totalXp
+        });
+        const remote = await loadSupabaseState(user, attachSupabaseUser(fallback, user), {
+          route,
+          includeTrading: shouldLoadTradingForRoute(route)
+        });
         if (cancelled) return;
         setSyncError(null);
         const reviewed = closePendingPreviousDays(normalizeState(remote));
@@ -425,7 +444,7 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
         });
         setState(next);
         saveState(next);
-        await saveSupabaseState(user.id, next);
+        await saveSupabaseState(user.id, next, { route, includeTrading: shouldLoadTradingForRoute(route) });
       } catch (error) {
         console.warn("DecideLife Supabase sync failed. Staying in local fallback mode.", error);
         setSyncError(error instanceof Error ? error.message : "Supabase sync failed.");
@@ -481,8 +500,16 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
       if (timeoutId) clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
         const fallback = attachSupabaseUser(getStoredLocalState(), supabaseUser);
-        console.info("[DecideLife sync] Remote change detected. Refreshing online state.", { userId: supabaseUser.id });
-        void loadSupabaseState(supabaseUser, fallback).then((remote) => {
+        const route = currentRoute();
+        console.info("[DecideLife sync] Remote change detected. Refreshing online state.", {
+          userId: supabaseUser.id,
+          route,
+          includeTrading: shouldLoadTradingForRoute(route)
+        });
+        void loadSupabaseState(supabaseUser, fallback, {
+          route,
+          includeTrading: shouldLoadTradingForRoute(route)
+        }).then((remote) => {
           if (cancelled) return;
           const reviewed = closePendingPreviousDays(normalizeState(remote));
           const next = attachSupabaseUser(reviewed, supabaseUser);
@@ -539,8 +566,15 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
       saveState(next);
       if (supabaseUser) {
         const onlineState = attachSupabaseUser(next, supabaseUser);
-        console.info("[DecideLife sync] Saving Supabase state", { userId: supabaseUser.id, level: onlineState.profile.currentLevel, xp: onlineState.profile.totalXp });
-        void saveSupabaseState(supabaseUser.id, onlineState).catch((error) => {
+        const route = currentRoute();
+        console.info("[DecideLife sync] Saving Supabase state", {
+          userId: supabaseUser.id,
+          route,
+          includeTrading: shouldLoadTradingForRoute(route),
+          level: onlineState.profile.currentLevel,
+          xp: onlineState.profile.totalXp
+        });
+        void saveSupabaseState(supabaseUser.id, onlineState, { route, includeTrading: shouldLoadTradingForRoute(route) }).catch((error) => {
           console.warn("DecideLife Supabase save failed. Local fallback was saved.", error);
         });
       }
@@ -823,7 +857,8 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
     setState(freshState);
     saveState(freshState);
     if (supabaseUser) {
-      void saveSupabaseState(supabaseUser.id, freshState).catch((error) => {
+      const route = currentRoute();
+      void saveSupabaseState(supabaseUser.id, freshState, { route, includeTrading: shouldLoadTradingForRoute(route) }).catch((error) => {
         console.warn("DecideLife Supabase reset save failed. Local fallback was reset.", error);
       });
     }
@@ -840,7 +875,8 @@ export function DecideLifeProvider({ children }: { children: ReactNode }) {
     setState(freshState);
     saveState(freshState);
     if (supabaseUser) {
-      void saveSupabaseState(supabaseUser.id, freshState).catch((error) => {
+      const route = currentRoute();
+      void saveSupabaseState(supabaseUser.id, freshState, { route, includeTrading: shouldLoadTradingForRoute(route) }).catch((error) => {
         console.warn("DecideLife Supabase reset save failed. Local fallback was reset.", error);
       });
     }
